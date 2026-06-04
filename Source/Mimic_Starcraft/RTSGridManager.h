@@ -6,6 +6,7 @@
 #include "RTSGridManager.generated.h"
 
 class ARTSBuilding;
+class URTSBuildingData;
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSGridManager : public AActor
@@ -32,7 +33,7 @@ public:
     FVector GridOrigin = FVector::ZeroVector;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTS Grid|Debug")
-    bool bDrawDebugGrid = true;
+    bool bDrawDebugGrid = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTS Grid|Debug")
     float DebugDrawHeight = 5.0f;
@@ -109,6 +110,38 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "RTS Grid")
     void DrawDebugGrid();
+
+    //그리드 매니저 추가 업데이트
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    bool CanPlaceBuildingByData(
+        FRTSGridCoord OriginCoord,
+        URTSBuildingData* BuildingData
+    ) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    bool IsFootprintPowered(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    bool IsFootprintOnCreep(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    bool IsFootprintOnVespeneGeyser(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    void AddPowerInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    void RemovePowerInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    void AddCreepInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    void MarkVespeneGeyser(FRTSGridCoord Coord, bool bHasGeyser);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    void SetVespeneOccupied(FRTSGridCoord Coord, bool bOccupied);
 
 private:
     int32 CoordToIndex(FRTSGridCoord Coord) const;

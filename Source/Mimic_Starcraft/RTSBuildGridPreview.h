@@ -33,6 +33,15 @@ public:
     UMaterialInterface* InvalidCellMaterial;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
+    int32 PreviewPaddingCells = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
+    bool bColorNearbyCellsByPlaceable = false;// 전체다 초록색으로 표현됨 건물 지을때
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
+    UMaterialInterface* NeutralCellMaterial;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Preview")
     float ZOffset = 4.0f;
 
 public:

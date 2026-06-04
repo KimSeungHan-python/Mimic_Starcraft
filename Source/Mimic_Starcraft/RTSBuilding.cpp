@@ -1,10 +1,11 @@
 #include "RTSBuilding.h"
 #include "RTSBuildingData.h"
 #include "Components/StaticMeshComponent.h"
+#include "RTSGridManager.h"
 
 ARTSBuilding::ARTSBuilding()
 {
-    PrimaryActorTick.bCanEverTick = false;
+    PrimaryActorTick.bCanEverTick = true;
 
     SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
     RootComponent = SceneRoot;
@@ -20,6 +21,24 @@ ARTSBuilding::ARTSBuilding()
 void ARTSBuilding::BeginPlay()
 {
     Super::BeginPlay();
+}
+
+void ARTSBuilding::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    if (BuildingState != ERTSBuildingState::UnderConstruction)
+    {
+        return;
+    }
+
+    CurrentBuildTime += DeltaTime;
+
+    if (CurrentBuildTime >= BuildTime)
+    {
+        CompleteConstruction();
+    }
+
 }
 
 void ARTSBuilding::InitializeBuilding(
@@ -102,6 +121,11 @@ void ARTSBuilding::SetPreviewBuildingMode(bool bPreview)
 {
     bIsPreviewBuilding = bPreview;
 
+    if (bIsPreviewBuilding)
+    {
+        BuildingState = ERTSBuildingState::Preview;
+    }
+
     TArray<UPrimitiveComponent*> PrimitiveComponents;
     GetComponents<UPrimitiveComponent>(PrimitiveComponents);
 
@@ -134,4 +158,69 @@ void ARTSBuilding::SetPreviewBuildingMode(bool bPreview)
     {
         Tags.Remove(TEXT("BuildPreview"));
     }
+}
+
+void ARTSBuilding::SetOwningGridManager(ARTSGridManager* InGridManager)
+{
+    OwningGridManager = InGridManager;
+}
+
+void ARTSBuilding::BeginConstruction(float InBuildTime)
+{
+    BuildTime = FMath::Max(0.01f, InBuildTime);
+    CurrentBuildTime = 0.0f;
+    bIsCompleted = false;
+    BuildingState = ERTSBuildingState::UnderConstruction;
+
+    // 건설 중에는 기능 비활성화.
+    // 공격, 생산, 업그레이드 등은 bIsCompleted 체크해서 막으면 됨.
+}
+
+void ARTSBuilding::CompleteConstruction()
+{
+    CurrentBuildTime = BuildTime;
+    bIsCompleted = true;
+    BuildingState = ERTSBuildingState::Completed;
+
+    OnConstructionCompleted();
+}
+
+float ARTSBuilding::GetBuildProgress01() const
+{
+    if (BuildTime <= KINDA_SMALL_NUMBER)
+    {
+        return 1.0f;
+    }
+
+    return FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f);
+}
+
+void ARTSBuilding::OnConstructionCompleted_Implementation()
+{
+    if (!BuildingData || !OwningGridManager)
+    {
+        return;
+    }
+
+    const FRTSGridCoord CenterCoord(
+        GridOriginCoord.X + GridWidth / 2,
+        GridOriginCoord.Y + GridHeight / 2
+    );
+
+    if (BuildingData->bProvidesPower)
+    {
+        OwningGridManager->AddPowerInRadius(
+            CenterCoord,
+            BuildingData->PowerRadiusCells
+        );
+    }
+
+    if (BuildingData->bProvidesCreep)
+    {
+        OwningGridManager->AddCreepInRadius(
+            CenterCoord,
+            BuildingData->CreepRadiusCells
+        );
+    }
+    // Blueprint에서 완성 이펙트, 사운드, UI 업데이트 가능
 }

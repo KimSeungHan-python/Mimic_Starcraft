@@ -58,6 +58,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FVector GroundNormal = FVector::UpVector;
 
+
+    //그리드 타입 추가 업데이트 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    int32 PowerProviderCount = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bHasCreep = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bHasVespeneGeyser = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    bool bVespeneOccupied = false;
+
     //UPROPERTY(EditAnywhere, BlueprintReadWrite)
     //float Height;
 

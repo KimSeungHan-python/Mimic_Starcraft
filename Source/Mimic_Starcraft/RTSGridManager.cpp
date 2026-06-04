@@ -1,5 +1,6 @@
 #include "RTSGridManager.h"
 #include "DrawDebugHelpers.h"
+#include "RTSBuildingData.h"
 
 ARTSGridManager::ARTSGridManager()
 {
@@ -444,4 +445,272 @@ void ARTSGridManager::DrawDebugGrid()
         //그려지는 셀들 세로 줄 여러개 생김 
         DrawDebugLine(GetWorld(), Start, End, FColor::Blue, true, -1.0f, 0, 1.0f);
     }
+}
+
+bool ARTSGridManager::CanPlaceBuildingByData(FRTSGridCoord OriginCoord, URTSBuildingData* BuildingData) const
+{
+    if (!BuildingData)
+    {
+        return false;
+    }
+
+    const int32 Width = BuildingData->GridWidth;
+    const int32 Height = BuildingData->GridHeight;
+
+    if (!CanPlaceBuilding(OriginCoord, Width, Height))
+    {
+        return false;
+    }
+
+    if (BuildingData->bRequiresPower)
+    {
+        if (!IsFootprintPowered(OriginCoord, Width, Height))
+        {
+            return false;
+        }
+    }
+
+    if (BuildingData->bRequiresCreep)
+    {
+        if (!IsFootprintOnCreep(OriginCoord, Width, Height))
+        {
+            return false;
+        }
+    }
+
+    if (BuildingData->bMustBuildOnVespeneGeyser)
+    {
+        if (!IsFootprintOnVespeneGeyser(OriginCoord, Width, Height))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+//지금은 건물의 중심이 셀에 있는지 인데 전체셀로 수정해야됨
+bool ARTSGridManager::IsFootprintPowered(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
+{
+    const FRTSGridCoord CenterCoord(
+        OriginCoord.X + Width / 2,
+        OriginCoord.Y + Height / 2
+    );
+
+    if (!IsValidCoord(CenterCoord))
+    {
+        return false;
+    }
+
+    const int32 Index = CoordToIndex(CenterCoord);
+
+    if (!Cells.IsValidIndex(Index))
+    {
+        return false;
+    }
+
+    return Cells[Index].PowerProviderCount > 0;
+}
+
+bool ARTSGridManager::IsFootprintOnCreep(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
+{
+    for (int32 Y = 0; Y < Height; ++Y)
+    {
+        for (int32 X = 0; X < Width; ++X)
+        {
+            const FRTSGridCoord Coord(
+                OriginCoord.X + X,
+                OriginCoord.Y + Y
+            );
+
+            if (!IsValidCoord(Coord))
+            {
+                return false;
+            }
+
+            const int32 Index = CoordToIndex(Coord);
+
+            if (!Cells.IsValidIndex(Index))
+            {
+                return false;
+            }
+
+            if (!Cells[Index].bHasCreep)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool ARTSGridManager::IsFootprintOnVespeneGeyser(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
+{
+    const FRTSGridCoord CenterCoord(
+        OriginCoord.X + Width / 2,
+        OriginCoord.Y + Height / 2
+    );
+
+    if (!IsValidCoord(CenterCoord))
+    {
+        return false;
+    }
+
+    const int32 Index = CoordToIndex(CenterCoord);
+
+    if (!Cells.IsValidIndex(Index))
+    {
+        return false;
+    }
+
+    const FRTSGridCell& Cell = Cells[Index];
+
+    return Cell.bHasVespeneGeyser && !Cell.bVespeneOccupied;
+}
+
+void ARTSGridManager::AddPowerInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells)
+{
+    for (int32 Y = -RadiusCells; Y <= RadiusCells; ++Y)
+    {
+        for (int32 X = -RadiusCells; X <= RadiusCells; ++X)
+        {
+            const int32 DistSq = X * X + Y * Y;
+
+            if (DistSq > RadiusCells * RadiusCells)
+            {
+                continue;
+            }
+
+            const FRTSGridCoord Coord(
+                CenterCoord.X + X,
+                CenterCoord.Y + Y
+            );
+
+            if (!IsValidCoord(Coord))
+            {
+                continue;
+            }
+
+            const int32 Index = CoordToIndex(Coord);
+
+            if (Cells.IsValidIndex(Index))
+            {
+                Cells[Index].PowerProviderCount++;
+            }
+        }
+    }
+}
+
+void ARTSGridManager::RemovePowerInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells)
+{
+    for (int32 Y = -RadiusCells; Y <= RadiusCells; ++Y)
+    {
+        for (int32 X = -RadiusCells; X <= RadiusCells; ++X)
+        {
+            const int32 DistSq = X * X + Y * Y;
+
+            if (DistSq > RadiusCells * RadiusCells)
+            {
+                continue;
+            }
+
+            const FRTSGridCoord Coord(
+                CenterCoord.X + X,
+                CenterCoord.Y + Y
+            );
+
+            if (!IsValidCoord(Coord))
+            {
+                continue;
+            }
+
+            const int32 Index = CoordToIndex(Coord);
+
+            if (Cells.IsValidIndex(Index))
+            {
+                Cells[Index].PowerProviderCount = FMath::Max(
+                    0,
+                    Cells[Index].PowerProviderCount - 1
+                );
+            }
+        }
+    }
+}
+
+void ARTSGridManager::AddCreepInRadius(FRTSGridCoord CenterCoord, int32 RadiusCells)
+{
+    for (int32 Y = -RadiusCells; Y <= RadiusCells; ++Y)
+    {
+        for (int32 X = -RadiusCells; X <= RadiusCells; ++X)
+        {
+            const int32 DistSq = X * X + Y * Y;
+
+            if (DistSq > RadiusCells * RadiusCells)
+            {
+                continue;
+            }
+
+            const FRTSGridCoord Coord(
+                CenterCoord.X + X,
+                CenterCoord.Y + Y
+            );
+
+            if (!IsValidCoord(Coord))
+            {
+                continue;
+            }
+
+            const int32 Index = CoordToIndex(Coord);
+
+            if (Cells.IsValidIndex(Index))
+            {
+                Cells[Index].bHasCreep = true;
+            }
+        }
+    }
+}
+
+void ARTSGridManager::MarkVespeneGeyser(FRTSGridCoord Coord, bool bHasGeyser)
+{
+    if (!IsValidCoord(Coord))
+    {
+        return;
+    }
+
+    const int32 Index = CoordToIndex(Coord);
+
+    if (!Cells.IsValidIndex(Index))
+    {
+        return;
+    }
+
+    Cells[Index].bHasVespeneGeyser = bHasGeyser;
+
+    if (!bHasGeyser)
+    {
+        Cells[Index].bVespeneOccupied = false;
+    }
+}
+
+void ARTSGridManager::SetVespeneOccupied(FRTSGridCoord Coord, bool bOccupied)
+{
+    if (!IsValidCoord(Coord))
+    {
+        return;
+    }
+
+    const int32 Index = CoordToIndex(Coord);
+
+    if (!Cells.IsValidIndex(Index))
+    {
+        return;
+    }
+
+    if (!Cells[Index].bHasVespeneGeyser)
+    {
+        return;
+    }
+
+    Cells[Index].bVespeneOccupied = bOccupied;
 }

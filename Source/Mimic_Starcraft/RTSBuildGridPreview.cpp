@@ -81,16 +81,21 @@ void ARTSBuildGridPreview::UpdateFootprint(
         return;
     }
 
-    const int32 RequiredCount = Width * Height;
+    const int32 Padding = FMath::Max(0, PreviewPaddingCells);
+
+    const int32 AreaWidth = Width + Padding * 2;
+    const int32 AreaHeight = Height + Padding * 2;
+    const int32 RequiredCount = AreaWidth * AreaHeight;
+
     EnsureTileCount(RequiredCount);
 
     const FVector TileScale = GetTileScale(GridManager->CellSize);
 
     int32 TileIndex = 0;
 
-    for (int32 Y = 0; Y < Height; ++Y)
+    for (int32 LocalY = -Padding; LocalY < Height + Padding; ++LocalY)
     {
-        for (int32 X = 0; X < Width; ++X)
+        for (int32 LocalX = -Padding; LocalX < Width + Padding; ++LocalX)
         {
             if (!TileComponents.IsValidIndex(TileIndex))
             {
@@ -100,9 +105,16 @@ void ARTSBuildGridPreview::UpdateFootprint(
             UStaticMeshComponent* TileComp = TileComponents[TileIndex];
 
             const FRTSGridCoord Coord(
-                OriginCoord.X + X,
-                OriginCoord.Y + Y
+                OriginCoord.X + LocalX,
+                OriginCoord.Y + LocalY
             );
+
+            if (!GridManager->IsValidCoord(Coord))
+            {
+                TileComp->SetVisibility(false, true);
+                ++TileIndex;
+                continue;
+            }
 
             FVector TileLocation;
             const bool bHasGround = GridManager->GetCellWorldCenterOnGround(Coord, TileLocation);
@@ -114,11 +126,46 @@ void ARTSBuildGridPreview::UpdateFootprint(
 
             TileLocation.Z += ZOffset;
 
+            const bool bInsideFootprint =
+                LocalX >= 0 &&
+                LocalY >= 0 &&
+                LocalX < Width &&
+                LocalY < Height;
+
             const bool bCellPlaceable = GridManager->IsCellPlaceable(Coord);
 
-            // 전체 footprint가 불가능하면 모두 빨강.
-            // 개별 셀도 불가능하면 빨강.
-            const bool bShowGreen = bOverallPlacementValid && bCellPlaceable;
+            UMaterialInterface* TargetMaterial = NeutralCellMaterial;
+
+            if (bInsideFootprint)
+            {
+                /*
+                 * 건물이 실제로 차지할 칸.
+                 * 전체 배치가 가능하면 초록,
+                 * 하나라도 문제가 있으면 footprint 전체를 빨강으로 보여줌.
+                 */
+                TargetMaterial = bOverallPlacementValid && bCellPlaceable
+                    ? ValidCellMaterial
+                    : InvalidCellMaterial;
+            }
+            else
+            {
+                /*
+                 * 주변 Grid.
+                 * 옵션에 따라 주변 칸도 건설 가능 여부를 보여줌.
+                 */
+                if (bColorNearbyCellsByPlaceable)
+                {
+                    TargetMaterial = bCellPlaceable
+                        ? ValidCellMaterial
+                        : InvalidCellMaterial;
+                }
+                else
+                {
+                    TargetMaterial = NeutralCellMaterial
+                        ? NeutralCellMaterial
+                        : ValidCellMaterial;
+                }
+            }
 
             TileComp->SetWorldLocation(TileLocation);
             TileComp->SetWorldRotation(FRotator::ZeroRotator);
@@ -129,17 +176,14 @@ void ARTSBuildGridPreview::UpdateFootprint(
                 TileComp->SetStaticMesh(TileMesh);
             }
 
-            UMaterialInterface* TargetMaterial = bShowGreen
-                ? ValidCellMaterial
-                : InvalidCellMaterial;
-
             if (TargetMaterial)
             {
                 TileComp->SetMaterial(0, TargetMaterial);
             }
 
             TileComp->SetVisibility(true, true);
-            TileIndex++;
+
+            ++TileIndex;
         }
     }
 

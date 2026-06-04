@@ -122,10 +122,15 @@ void ARTSPlayerController::UpdateBuildingPreview()
     CurrentPreviewCoord.X = MouseCoord.X - SelectedBuildingData->GridWidth / 2;
     CurrentPreviewCoord.Y = MouseCoord.Y - SelectedBuildingData->GridHeight / 2;
 
-    bCurrentPlacementValid = GridManager->CanPlaceBuilding(
+    //bCurrentPlacementValid = GridManager->CanPlaceBuilding(
+    //    CurrentPreviewCoord,
+    //    SelectedBuildingData->GridWidth,
+    //    SelectedBuildingData->GridHeight
+    //);
+    //수정됨
+    bCurrentPlacementValid = GridManager->CanPlaceBuildingByData(
         CurrentPreviewCoord,
-        SelectedBuildingData->GridWidth,
-        SelectedBuildingData->GridHeight
+        SelectedBuildingData
     );
 
     FVector BuildingCenter;
@@ -180,6 +185,12 @@ void ARTSPlayerController::ConfirmBuild()
     {
         return;
     }
+
+    if (!PreviewBuildingActor || !bHasValidPreviewTransform)
+    {
+        return;
+    }
+
 
     TSubclassOf<ARTSBuilding> BuildingClass = SelectedBuildingData->BuildingClass;
 
@@ -243,12 +254,28 @@ void ARTSPlayerController::ConfirmBuild()
 
     NewBuilding->FitMeshToGridFootprint(GridManager->CellSize);
 
+    NewBuilding->SetPreviewBuildingMode(false);
+
     GridManager->OccupyBuildingCells(
         CurrentPreviewCoord,
         SelectedBuildingData->GridWidth,
         SelectedBuildingData->GridHeight,
         NewBuilding->GetUniqueID()
     );
+
+    // 베스핀 건물이라면 가스 점유 처리
+    if (SelectedBuildingData->bMustBuildOnVespeneGeyser)
+    {
+        const FRTSGridCoord CenterCoord(
+            CurrentPreviewCoord.X + SelectedBuildingData->GridWidth / 2,
+            CurrentPreviewCoord.Y + SelectedBuildingData->GridHeight / 2
+        );
+
+        GridManager->SetVespeneOccupied(CenterCoord, true);
+    }
+
+    // 바로 완성하지 않고 건설 시작
+    NewBuilding->BeginConstruction(SelectedBuildingData->BuildTime);
     //UE_LOG(LogTemp, Warning, TEXT("SpawnLocation: %s"), *SpawnBuildingLocation.ToString());
     CancelBuildMode();
 }
