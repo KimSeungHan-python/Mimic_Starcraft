@@ -58,18 +58,18 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     FVector GroundNormal = FVector::UpVector;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    float Height;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    //float Height;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bHasCreep;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    //bool bHasCreep;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bHasPower;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    //bool bHasPower;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bIsResourceBlocked;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    //bool bIsResourceBlocked;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    bool bIsRamp;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    //bool bIsRamp;
 };

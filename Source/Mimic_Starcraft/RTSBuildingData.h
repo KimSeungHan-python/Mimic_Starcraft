@@ -28,5 +28,5 @@ public:
     TSubclassOf<ARTSBuilding> BuildingClass;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
-    UStaticMesh* PreviewMesh = nullptr;
+    UStaticMesh* PreviewStaticMesh = nullptr;
 };

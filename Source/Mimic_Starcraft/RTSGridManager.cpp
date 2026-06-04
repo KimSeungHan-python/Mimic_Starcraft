@@ -3,6 +3,7 @@
 
 ARTSGridManager::ARTSGridManager()
 {
+    // Tick 사용 X
     PrimaryActorTick.bCanEverTick = false;
 }
 
@@ -10,7 +11,15 @@ void ARTSGridManager::BeginPlay()
 {
     Super::BeginPlay();
 
+
+    //에디터에 배치된 위치에서 시작 
+    GridOrigin = GetActorLocation();
+
+    // 그리드 시작
     InitializeGrid();
+
+
+
 
     if (bDrawDebugGrid)
     {
@@ -20,6 +29,7 @@ void ARTSGridManager::BeginPlay()
 
 void ARTSGridManager::InitializeGrid()
 {
+    //전체 셀 개수
     const int32 TotalCells = GridWidth * GridHeight;
 
     Cells.Empty();
@@ -40,6 +50,7 @@ void ARTSGridManager::InitializeGrid()
     }
 }
 
+//그리드 안에 있는 셀이 확실한지
 bool ARTSGridManager::IsValidCoord(FRTSGridCoord Coord) const
 {
     return Coord.X >= 0
@@ -48,11 +59,13 @@ bool ARTSGridManager::IsValidCoord(FRTSGridCoord Coord) const
         && Coord.Y < GridHeight;
 }
 
+// 셀의 인덱스 가져오기
 int32 ARTSGridManager::CoordToIndex(FRTSGridCoord Coord) const
 {
     return Coord.Y * GridWidth + Coord.X;
 }
 
+//지면까지의 높이 재기
 bool ARTSGridManager::TraceGroundAt(FVector XYWorldLocation, FHitResult& OutHit) const
 {
     if (!GetWorld())
@@ -86,6 +99,7 @@ bool ARTSGridManager::TraceGroundAt(FVector XYWorldLocation, FHitResult& OutHit)
 
 bool ARTSGridManager::EvaluateCellTerrain(FRTSGridCoord Coord, FRTSGridCell& OutCell) const
 {
+    //처음에 다 초기화
     OutCell.bBuildable = false;
     OutCell.bWalkable = false;
     OutCell.bOccupied = false;
@@ -94,8 +108,9 @@ bool ARTSGridManager::EvaluateCellTerrain(FRTSGridCoord Coord, FRTSGridCell& Out
     OutCell.GroundZ = GridOrigin.Z;
     OutCell.GroundNormal = FVector::UpVector;
 
+    //중심점 구하고
     const FVector Center = GridToWorldCenter(Coord);
-
+    //중심과 지면까지의 높이 구하기 
     FHitResult CenterHit;
     if (!TraceGroundAt(Center, CenterHit))
     {
@@ -127,6 +142,7 @@ bool ARTSGridManager::EvaluateCellTerrain(FRTSGridCoord Coord, FRTSGridCell& Out
 
     const float Half = CellSize * 0.45f;
 
+    //꼭짓점 부근에서도 지면까지의 높이 체크
     const FVector SamplePoints[4] =
     {
         Center + FVector(Half,  Half, 0.0f),
@@ -135,6 +151,7 @@ bool ARTSGridManager::EvaluateCellTerrain(FRTSGridCoord Coord, FRTSGridCell& Out
         Center + FVector(-Half, -Half, 0.0f)
     };
 
+    //셀 안 각 꼭짓점들 체크
     for (const FVector& SamplePoint : SamplePoints)
     {
         FHitResult Hit;
@@ -159,6 +176,7 @@ bool ARTSGridManager::EvaluateCellTerrain(FRTSGridCoord Coord, FRTSGridCell& Out
     return true;
 }
 
+// 월드좌표를 그리드의 위치로 전환(인덱스)
 FRTSGridCoord ARTSGridManager::WorldToGrid(FVector WorldLocation) const
 {
     const FVector Local = WorldLocation - GridOrigin;
@@ -169,6 +187,7 @@ FRTSGridCoord ARTSGridManager::WorldToGrid(FVector WorldLocation) const
     return FRTSGridCoord(X, Y);
 }
 
+//그리드의 개수 더하기 + 셀 중간 값 해당 => 해당 셀의 가운데 값 반환 
 FVector ARTSGridManager::GridToWorldCenter(FRTSGridCoord Coord) const
 {
     const float WorldX = GridOrigin.X + Coord.X * CellSize + CellSize * 0.5f;
@@ -177,6 +196,7 @@ FVector ARTSGridManager::GridToWorldCenter(FRTSGridCoord Coord) const
     return FVector(WorldX, WorldY, GridOrigin.Z);
 }
 
+//해당 셀이 땅위에 있는것인지 체크
 bool ARTSGridManager::GetCellWorldCenterOnGround(FRTSGridCoord Coord, FVector& OutLocation) const
 {
     OutLocation = GridToWorldCenter(Coord);
@@ -203,7 +223,7 @@ bool ARTSGridManager::GetCellWorldCenterOnGround(FRTSGridCoord Coord, FVector& O
     OutLocation.Z = Cell.GroundZ;
     return true;
 }
-
+//지을려는 빌딩 셀들의 중앙값이 건물이 바닥위에 있는건지 확인
 bool ARTSGridManager::GetBuildingCenterLocationOnGround(FRTSGridCoord OriginCoord, int32 Width, int32 Height, FVector& OutLocation) const
 {
     OutLocation = GridToWorldCenter(OriginCoord);
@@ -349,6 +369,7 @@ void ARTSGridManager::OccupyBuildingCells(FRTSGridCoord OriginCoord, int32 Width
     }
 }
 
+//빌딩 셀을 제거 나중에 빌딩 제거 할때 사용하면 됨.
 void ARTSGridManager::ReleaseBuildingCells(FRTSGridCoord OriginCoord, int32 Width, int32 Height)
 {
     for (int32 Y = 0; Y < Height; ++Y)
@@ -403,6 +424,7 @@ void ARTSGridManager::DrawDebugGrid()
             Z
         );
 
+        //그려지는 셀들 가로 줄 여러개 생김 
         DrawDebugLine(GetWorld(), Start, End, FColor::Blue, true, -1.0f, 0, 1.0f);
     }
 
@@ -419,7 +441,7 @@ void ARTSGridManager::DrawDebugGrid()
             GridOrigin.Y + Y * CellSize,
             Z
         );
-
+        //그려지는 셀들 세로 줄 여러개 생김 
         DrawDebugLine(GetWorld(), Start, End, FColor::Blue, true, -1.0f, 0, 1.0f);
     }
 }
