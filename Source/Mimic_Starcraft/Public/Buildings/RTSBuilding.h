@@ -8,6 +8,8 @@
 class URTSBuildingData;
 class ARTSGridManager;
 class ARTSPlayerState;
+class UStaticMeshComponent;
+class USceneComponent;
 
 UENUM(BlueprintType)
 enum class ERTSBuildingState : uint8
@@ -39,24 +41,29 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* MeshComponent;
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     URTSBuildingData* BuildingData;
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     FRTSGridCoord GridOriginCoord;
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     int32 GridWidth = 1;
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     int32 GridHeight = 1;
+
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
+    float CachedCellSize = 100.0f;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void InitializeBuilding(
         URTSBuildingData* InBuildingData,
         FRTSGridCoord InGridOriginCoord,
         int32 InGridWidth,
-        int32 InGridHeight
+        int32 InGridHeight,
+        float InCellSize,
+        ARTSGridManager* InGridManager
     );
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
@@ -71,16 +78,18 @@ public:
     TObjectPtr<ARTSGridManager> OwningGridManager = nullptr;
 
     
-
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void SetOwningGridManager(ARTSGridManager* InGridManager);
 
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Construction")
+    UPROPERTY(ReplicatedUsing = OnRep_BuildingState, BlueprintReadOnly, Category = "RTS Building|Construction")
     ERTSBuildingState BuildingState = ERTSBuildingState::Completed;
 
-    UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Construction")
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Building|Construction")
     float BuildTime = 0.0f;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Building|Construction")
+    float BuildStartServerTime = 0.0f;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Construction")
     float CurrentBuildTime = 0.0f;
@@ -102,6 +111,21 @@ public:
 
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();
+
+    UFUNCTION()
+    void OnRep_BuildingSetup();
+
+    UFUNCTION()
+    void OnRep_BuildingState();
+
+private:
+    bool bRegisteredOnLocalGrid = false;
+
+protected:
+    void RefreshBuildingVisual();
+    void RegisterToLocalGridIfNeeded();
+    ARTSGridManager* ResolveGridManager();
+    float GetSyncedServerTimeSeconds() const;
 
     // Start 및 소유 관련 변수
 public:

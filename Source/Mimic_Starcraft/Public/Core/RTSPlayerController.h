@@ -36,6 +36,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Building")
     TEnumAsByte<ECollisionChannel> GroundTraceChannel = ECC_Visibility;
 
+    // 서버 RPC에서 BuildingId로 DataAsset을 다시 찾기 위한 목록
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTS Building")
+    TArray<URTSBuildingData*> BuildingDataList;
+
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
     bool bIsInBuildMode = false;
 
@@ -77,6 +81,12 @@ public:
     UFUNCTION(Client, Reliable)
     void Client_SetStartCamera(const FTransform& CameraTransform);
 
+    ARTSGridManager* ResolveGridManager();
+
+protected:
+    UFUNCTION(Server, Reliable)
+    void ServerConfirmBuild(FName BuildingId, FRTSGridCoord OriginCoord);
+
 private:
     bool GetMouseWorldLocation(FVector& OutLocation) const;
     void UpdateBuildingPreview();
@@ -85,4 +95,7 @@ private:
     void SetPreviewValidVisual(bool bValid);
     void CreateBuildGridPreviewActor();
     void DestroyBuildGridPreviewActor();
+
+    void BuildOnServer(FName BuildingId, FRTSGridCoord OriginCoord);
+    URTSBuildingData* FindBuildingDataById(FName BuildingId) const;
 };

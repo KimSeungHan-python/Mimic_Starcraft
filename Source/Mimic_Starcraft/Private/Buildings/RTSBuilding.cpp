@@ -1,7 +1,12 @@
 #include "Buildings/RTSBuilding.h"
 #include "Data/RTSBuildingData.h"
-#include "Components/StaticMeshComponent.h"
 #include "Grid/RTSGridManager.h"
+
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
+#include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 
 ARTSBuilding::ARTSBuilding()
@@ -22,11 +27,28 @@ ARTSBuilding::ARTSBuilding()
 void ARTSBuilding::BeginPlay()
 {
     Super::BeginPlay();
+
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    RefreshBuildingVisual();
+
+    if (!HasAuthority())
+    {
+        RegisterToLocalGridIfNeeded();
+    }
 }
 
 void ARTSBuilding::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    if (!HasAuthority())
+    {
+        return;
+    }
 
     if (BuildingState != ERTSBuildingState::UnderConstruction)
     {
@@ -42,17 +64,44 @@ void ARTSBuilding::Tick(float DeltaTime)
 
 }
 
+void ARTSBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(ARTSBuilding, BuildingData);
+    DOREPLIFETIME(ARTSBuilding, GridOriginCoord);
+    DOREPLIFETIME(ARTSBuilding, GridWidth);
+    DOREPLIFETIME(ARTSBuilding, GridHeight);
+    DOREPLIFETIME(ARTSBuilding, CachedCellSize);
+    DOREPLIFETIME(ARTSBuilding, BuildingState);
+    DOREPLIFETIME(ARTSBuilding, BuildTime);
+    DOREPLIFETIME(ARTSBuilding, BuildStartServerTime);
+    DOREPLIFETIME(ARTSBuilding, TeamNumber);
+    DOREPLIFETIME(ARTSBuilding, TeamColor);
+}
+
 void ARTSBuilding::InitializeBuilding(
     URTSBuildingData* InBuildingData,
     FRTSGridCoord InGridOriginCoord,
     int32 InGridWidth,
-    int32 InGridHeight
+    int32 InGridHeight,
+    float InCellSize,
+    ARTSGridManager* InGridManager
 )
 {
     BuildingData = InBuildingData;
     GridOriginCoord = InGridOriginCoord;
     GridWidth = InGridWidth;
     GridHeight = InGridHeight;
+    CachedCellSize = InCellSize;
+    OwningGridManager = InGridManager;
+
+    RefreshBuildingVisual();
+
+    if (!HasAuthority())
+    {
+        RegisterToLocalGridIfNeeded();
+    }
 }
 
 void ARTSBuilding::FitMeshToGridFootprint(float CellSize)
@@ -105,17 +154,49 @@ void ARTSBuilding::FitMeshToGridFootprint(float CellSize)
 
     MeshComponent->SetRelativeLocation(NewRelativeLocation);
 
-    UE_LOG(LogTemp, Warning, TEXT("MeshBounds Origin: %s"),
-        *MeshBounds.Origin.ToString());
+    //UE_LOG(LogTemp, Warning, TEXT("MeshBounds Origin: %s"),
+    //    *MeshBounds.Origin.ToString());
 
-    UE_LOG(LogTemp, Warning, TEXT("MeshBounds Extent: %s"),
-        *MeshBounds.BoxExtent.ToString());
+    //UE_LOG(LogTemp, Warning, TEXT("MeshBounds Extent: %s"),
+    //    *MeshBounds.BoxExtent.ToString());
 
-    UE_LOG(LogTemp, Warning, TEXT("Mesh NewScale: %s"),
-        *NewScale.ToString());
+    //UE_LOG(LogTemp, Warning, TEXT("Mesh NewScale: %s"),
+    //    *NewScale.ToString());
 
-    UE_LOG(LogTemp, Warning, TEXT("Mesh NewRelativeLocation: %s"),
-        *NewRelativeLocation.ToString());
+    //UE_LOG(LogTemp, Warning, TEXT("Mesh NewRelativeLocation: %s"),
+    //    *NewRelativeLocation.ToString());
+}
+
+void ARTSBuilding::BeginConstruction(float InBuildTime)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+
+    BuildTime = FMath::Max(0.01f, InBuildTime);
+    BuildStartServerTime = GetSyncedServerTimeSeconds();
+    BuildingState = ERTSBuildingState::UnderConstruction;
+    bIsCompleted = false;
+
+    OnRep_BuildingState();
+}
+
+void ARTSBuilding::CompleteConstruction()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    CurrentBuildTime = BuildTime;
+    bIsCompleted = true;
+
+    BuildingState = ERTSBuildingState::Completed;
+
+    OnRep_BuildingState();
+    OnConstructionCompleted();
 }
 
 void ARTSBuilding::SetPreviewBuildingMode(bool bPreview)
@@ -161,39 +242,146 @@ void ARTSBuilding::SetPreviewBuildingMode(bool bPreview)
     }
 }
 
+void ARTSBuilding::OnRep_BuildingSetup()
+{
+    RefreshBuildingVisual();
+
+    if (!HasAuthority())
+    {
+        RegisterToLocalGridIfNeeded();
+    }
+}
+
+void ARTSBuilding::OnRep_BuildingState()
+{
+    RefreshBuildingVisual();
+}
+
+
+void ARTSBuilding::RefreshBuildingVisual()
+{
+    if (!MeshComponent)
+    {
+        return;
+    }
+
+    if (BuildingData && BuildingData->PreviewStaticMesh && !MeshComponent->GetStaticMesh())
+    {
+        MeshComponent->SetStaticMesh(BuildingData->PreviewStaticMesh);
+    }
+
+    if (MeshComponent->GetStaticMesh())
+    {
+        FitMeshToGridFootprint(CachedCellSize);
+    }
+}
+
+void ARTSBuilding::RegisterToLocalGridIfNeeded()
+{
+    if (bIsPreviewBuilding)
+    {
+        return;
+    }
+
+    if (bRegisteredOnLocalGrid)
+    {
+        return;
+    }
+
+    if (!BuildingData)
+    {
+        return;
+    }
+
+    if (GridWidth <= 0 || GridHeight <= 0)
+    {
+        return;
+    }
+
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    if (!OwningGridManager)
+    {
+        return;
+    }
+
+    if (BuildingState == ERTSBuildingState::Flying)
+    {
+        return;
+    }
+
+    OwningGridManager->OccupyBuildingCells(
+        GridOriginCoord,
+        GridWidth,
+        GridHeight,
+        GetUniqueID()
+    );
+
+    bRegisteredOnLocalGrid = true;
+}
+
+ARTSGridManager* ARTSBuilding::ResolveGridManager()
+{
+    if (!GetWorld())
+    {
+        return nullptr;
+    }
+
+    for (TActorIterator<ARTSGridManager> It(GetWorld()); It; ++It)
+    {
+        return *It;
+    }
+
+    return nullptr;
+}
+
+float ARTSBuilding::GetSyncedServerTimeSeconds() const
+{
+    if (!GetWorld())
+    {
+        return 0.0f;
+    }
+
+    const AGameStateBase* GameState = GetWorld()->GetGameState<AGameStateBase>();
+
+    if (GameState)
+    {
+        return GameState->GetServerWorldTimeSeconds();
+    }
+
+    return GetWorld()->GetTimeSeconds();
+}
+
 void ARTSBuilding::SetOwningGridManager(ARTSGridManager* InGridManager)
 {
     OwningGridManager = InGridManager;
 }
 
-void ARTSBuilding::BeginConstruction(float InBuildTime)
-{
-    BuildTime = FMath::Max(0.01f, InBuildTime);
-    CurrentBuildTime = 0.0f;
-    bIsCompleted = false;
-    BuildingState = ERTSBuildingState::UnderConstruction;
-
-    // 건설 중에는 기능 비활성화.
-    // 공격, 생산, 업그레이드 등은 bIsCompleted 체크해서 막으면 됨.
-}
-
-void ARTSBuilding::CompleteConstruction()
-{
-    CurrentBuildTime = BuildTime;
-    bIsCompleted = true;
-    BuildingState = ERTSBuildingState::Completed;
-
-    OnConstructionCompleted();
-}
 
 float ARTSBuilding::GetBuildProgress01() const
 {
+    if (BuildingState == ERTSBuildingState::Completed)
+    {
+        return 1.0f;
+    }
+
+    if (BuildingState != ERTSBuildingState::UnderConstruction)
+    {
+        return 0.0f;
+    }
+
     if (BuildTime <= KINDA_SMALL_NUMBER)
     {
         return 1.0f;
     }
 
-    return FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f);
+    const float Now = GetSyncedServerTimeSeconds();
+    const float Elapsed = Now - BuildStartServerTime;
+
+    return FMath::Clamp(Elapsed / BuildTime, 0.0f, 1.0f);
 }
 
 void ARTSBuilding::OnConstructionCompleted_Implementation()
@@ -236,13 +424,6 @@ void ARTSBuilding::ApplyTeamVisual()
     // 건물 머티리얼 색상 변경 처리
 }
 
-void ARTSBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    DOREPLIFETIME(ARTSBuilding, TeamNumber);
-    DOREPLIFETIME(ARTSBuilding, TeamColor);
-}
 
 void ARTSBuilding::SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor)
 {

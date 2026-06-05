@@ -19,11 +19,7 @@ void ARTSPlayerController::BeginPlay()
 
     if (!GridManager)
     {
-        for (TActorIterator<ARTSGridManager> It(GetWorld()); It; ++It)
-        {
-            GridManager = *It;
-            break;
-        }
+        GridManager = ResolveGridManager();
     }
 }
 
@@ -186,13 +182,171 @@ void ARTSPlayerController::ConfirmBuild()
         return;
     }
 
-    if (!PreviewBuildingActor || !bHasValidPreviewTransform)
+    if (!bHasValidPreviewTransform)
     {
         return;
     }
 
+    const FName BuildingId = SelectedBuildingData->BuildingId;
+    const FRTSGridCoord OriginCoord = CurrentPreviewCoord;
 
-    TSubclassOf<ARTSBuilding> BuildingClass = SelectedBuildingData->BuildingClass;
+    if (HasAuthority())
+    {
+        BuildOnServer(BuildingId, OriginCoord);
+    }
+    else
+    {
+        ServerConfirmBuild(BuildingId, OriginCoord);
+    }
+
+    CancelBuildMode();
+    //if (!bIsInBuildMode)
+    //{
+    //    return;
+    //}
+
+    //if (!GridManager || !SelectedBuildingData)
+    //{
+    //    return;
+    //}
+
+    //if (!bCurrentPlacementValid)
+    //{
+    //    return;
+    //}
+
+    //if (!PreviewBuildingActor || !bHasValidPreviewTransform)
+    //{
+    //    return;
+    //}
+
+
+    //TSubclassOf<ARTSBuilding> BuildingClass = SelectedBuildingData->BuildingClass;
+
+    //if (!BuildingClass)
+    //{
+    //    BuildingClass = DefaultBuildingClass;
+    //}
+
+    //if (!BuildingClass)
+    //{
+    //    return;
+    //}
+
+    ////FVector SpawnBuildingLocation;
+
+    ////GridManager->GetBuildingCenterLocationOnGround(
+    ////    CurrentPreviewCoord,
+    ////    SelectedBuildingData->GridWidth,
+    ////    SelectedBuildingData->GridHeight,
+    ////    SpawnBuildingLocation
+    ////);
+
+    //FTransform SpawnTransform = LastPreviewTransform;
+
+    //UE_LOG(LogTemp, Warning, TEXT("Spawn from Preview Transform Location: %s"),
+    //    *SpawnTransform.GetLocation().ToString()
+    //);
+
+    //DrawDebugSphere(
+    //    GetWorld(),
+    //    SpawnTransform.GetLocation(),
+    //    80.0f,
+    //    16,
+    //    FColor::Yellow,
+    //    false,
+    //    5.0f
+    //);
+
+    //FActorSpawnParameters SpawnParams;
+    //SpawnParams.Owner = this;
+    //SpawnParams.SpawnCollisionHandlingOverride =
+    //    ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    //ARTSBuilding* NewBuilding = GetWorld()->SpawnActor<ARTSBuilding>(
+    //    BuildingClass,
+    //    SpawnTransform,
+    //    SpawnParams
+    //);
+
+    //if (!NewBuilding)
+    //{
+    //    return;
+    //}
+
+    //NewBuilding->InitializeBuilding(
+    //    SelectedBuildingData,
+    //    CurrentPreviewCoord,
+    //    SelectedBuildingData->GridWidth,
+    //    SelectedBuildingData->GridHeight
+    //);
+
+    //NewBuilding->FitMeshToGridFootprint(GridManager->CellSize);
+
+    //NewBuilding->SetPreviewBuildingMode(false);
+
+    //GridManager->OccupyBuildingCells(
+    //    CurrentPreviewCoord,
+    //    SelectedBuildingData->GridWidth,
+    //    SelectedBuildingData->GridHeight,
+    //    NewBuilding->GetUniqueID()
+    //);
+
+    //// 베스핀 건물이라면 가스 점유 처리
+    //if (SelectedBuildingData->bMustBuildOnVespeneGeyser)
+    //{
+    //    const FRTSGridCoord CenterCoord(
+    //        CurrentPreviewCoord.X + SelectedBuildingData->GridWidth / 2,
+    //        CurrentPreviewCoord.Y + SelectedBuildingData->GridHeight / 2
+    //    );
+
+    //    GridManager->SetVespeneOccupied(CenterCoord, true);
+    //}
+
+    //// 바로 완성하지 않고 건설 시작
+    //NewBuilding->BeginConstruction(SelectedBuildingData->BuildTime);
+    ////UE_LOG(LogTemp, Warning, TEXT("SpawnLocation: %s"), *SpawnBuildingLocation.ToString());
+    //CancelBuildMode();
+}
+
+void ARTSPlayerController::ServerConfirmBuild_Implementation(FName BuildingId, FRTSGridCoord OriginCoord)
+{
+    BuildOnServer(BuildingId, OriginCoord);
+}
+
+void ARTSPlayerController::BuildOnServer(FName BuildingId, FRTSGridCoord OriginCoord)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    if (!GridManager)
+    {
+        GridManager = ResolveGridManager();
+    }
+
+    if (!GridManager)
+    {
+        UE_LOG(LogTemp, Error, TEXT("BuildOnServer failed: GridManager is null"));
+        return;
+    }
+
+    URTSBuildingData* BuildingData = FindBuildingDataById(BuildingId);
+
+    if (!BuildingData)
+    {
+        UE_LOG(LogTemp, Error, TEXT("BuildOnServer failed: BuildingData not found. BuildingId=%s"), *BuildingId.ToString());
+        return;
+    }
+
+    if (!GridManager->CanPlaceBuildingByData(OriginCoord, BuildingData))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("BuildOnServer rejected: invalid placement"));
+        return;
+    }
+
+    TSubclassOf<ARTSBuilding> BuildingClass = BuildingData->BuildingClass;
 
     if (!BuildingClass)
     {
@@ -201,33 +355,22 @@ void ARTSPlayerController::ConfirmBuild()
 
     if (!BuildingClass)
     {
+        UE_LOG(LogTemp, Error, TEXT("BuildOnServer failed: BuildingClass is null"));
         return;
     }
 
-    //FVector SpawnBuildingLocation;
-
-    //GridManager->GetBuildingCenterLocationOnGround(
-    //    CurrentPreviewCoord,
-    //    SelectedBuildingData->GridWidth,
-    //    SelectedBuildingData->GridHeight,
-    //    SpawnBuildingLocation
-    //);
-
-    FTransform SpawnTransform = LastPreviewTransform;
-
-    UE_LOG(LogTemp, Warning, TEXT("Spawn from Preview Transform Location: %s"),
-        *SpawnTransform.GetLocation().ToString()
+    FVector BuildingCenter;
+    GridManager->GetBuildingCenterLocationOnGround(
+        OriginCoord,
+        BuildingData->GridWidth,
+        BuildingData->GridHeight,
+        BuildingCenter
     );
 
-    DrawDebugSphere(
-        GetWorld(),
-        SpawnTransform.GetLocation(),
-        80.0f,
-        16,
-        FColor::Yellow,
-        false,
-        5.0f
-    );
+    FTransform SpawnTransform;
+    SpawnTransform.SetLocation(BuildingCenter);
+    SpawnTransform.SetRotation(FRotator::ZeroRotator.Quaternion());
+    SpawnTransform.SetScale3D(FVector::OneVector);
 
     FActorSpawnParameters SpawnParams;
     SpawnParams.Owner = this;
@@ -242,42 +385,57 @@ void ARTSPlayerController::ConfirmBuild()
 
     if (!NewBuilding)
     {
+        UE_LOG(LogTemp, Error, TEXT("BuildOnServer failed: SpawnActor returned null"));
         return;
     }
 
     NewBuilding->InitializeBuilding(
-        SelectedBuildingData,
-        CurrentPreviewCoord,
-        SelectedBuildingData->GridWidth,
-        SelectedBuildingData->GridHeight
+        BuildingData,
+        OriginCoord,
+        BuildingData->GridWidth,
+        BuildingData->GridHeight,
+        GridManager->CellSize,
+        GridManager
     );
 
-    NewBuilding->FitMeshToGridFootprint(GridManager->CellSize);
-
     NewBuilding->SetPreviewBuildingMode(false);
+ 
 
     GridManager->OccupyBuildingCells(
-        CurrentPreviewCoord,
-        SelectedBuildingData->GridWidth,
-        SelectedBuildingData->GridHeight,
+        OriginCoord,
+        BuildingData->GridWidth,
+        BuildingData->GridHeight,
         NewBuilding->GetUniqueID()
     );
 
-    // 베스핀 건물이라면 가스 점유 처리
-    if (SelectedBuildingData->bMustBuildOnVespeneGeyser)
-    {
-        const FRTSGridCoord CenterCoord(
-            CurrentPreviewCoord.X + SelectedBuildingData->GridWidth / 2,
-            CurrentPreviewCoord.Y + SelectedBuildingData->GridHeight / 2
-        );
+    NewBuilding->BeginConstruction(BuildingData->BuildTime);
 
-        GridManager->SetVespeneOccupied(CenterCoord, true);
+    UE_LOG(LogTemp, Warning, TEXT("Server spawned building: %s"), *NewBuilding->GetName());
+}
+
+
+URTSBuildingData* ARTSPlayerController::FindBuildingDataById(FName BuildingId) const
+{
+    for (URTSBuildingData* Data : BuildingDataList)
+    {
+        if (!Data)
+        {
+            continue;
+        }
+
+        if (Data->BuildingId == BuildingId)
+        {
+            return Data;
+        }
     }
 
-    // 바로 완성하지 않고 건설 시작
-    NewBuilding->BeginConstruction(SelectedBuildingData->BuildTime);
-    //UE_LOG(LogTemp, Warning, TEXT("SpawnLocation: %s"), *SpawnBuildingLocation.ToString());
-    CancelBuildMode();
+    // Listen Server Host에서 테스트할 때를 위한 보조 fallback
+    if (SelectedBuildingData && SelectedBuildingData->BuildingId == BuildingId)
+    {
+        return SelectedBuildingData;
+    }
+
+    return nullptr;
 }
 
 void ARTSPlayerController::Client_SetStartCamera_Implementation(const FTransform& CameraTransform)
@@ -331,6 +489,10 @@ void ARTSPlayerController::CreatePreviewActor()
         SpawnParams
     );
 
+    PreviewBuildingActor->SetReplicates(false);
+    PreviewBuildingActor->SetReplicateMovement(false);
+    PreviewBuildingActor->SetPreviewBuildingMode(true);
+
     if (!PreviewBuildingActor)
     {
         UE_LOG(LogTemp, Error, TEXT("CreatePreviewActor failed: Spawn failed"));
@@ -341,7 +503,9 @@ void ARTSPlayerController::CreatePreviewActor()
         SelectedBuildingData,
         FRTSGridCoord(0, 0),
         SelectedBuildingData->GridWidth,
-        SelectedBuildingData->GridHeight
+        SelectedBuildingData->GridHeight,
+        GridManager->CellSize,
+        GridManager
     );
 
     // 실제 건물과 같은 크기 보정 사용
@@ -435,4 +599,19 @@ void ARTSPlayerController::DestroyBuildGridPreviewActor()
         BuildGridPreviewActor->Destroy();
         BuildGridPreviewActor = nullptr;
     }
+}
+
+ARTSGridManager* ARTSPlayerController::ResolveGridManager()
+{
+    if (!GetWorld())
+    {
+        return nullptr;
+    }
+
+    for (TActorIterator<ARTSGridManager> It(GetWorld()); It; ++It)
+    {
+        return *It;
+    }
+
+    return nullptr;
 }
