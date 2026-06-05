@@ -7,6 +7,7 @@
 
 class URTSBuildingData;
 class ARTSGridManager;
+class ARTSPlayerState;
 
 UENUM(BlueprintType)
 enum class ERTSBuildingState : uint8
@@ -102,6 +103,25 @@ public:
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();
 
+    // Start 및 소유 관련 변수
+public:
 
+    UPROPERTY(ReplicatedUsing = OnRep_TeamInfo, BlueprintReadOnly, Category = "RTS Team")
+    int32 TeamNumber = -1;
 
+    UPROPERTY(ReplicatedUsing = OnRep_TeamInfo, BlueprintReadOnly, Category = "RTS Team")
+    FLinearColor TeamColor = FLinearColor::White;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
+    TObjectPtr<ARTSPlayerState> OwningPlayerState;
+
+    UFUNCTION()
+    void OnRep_TeamInfo();
+
+    void ApplyTeamVisual();
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+    UFUNCTION()
+    void SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor);
 };

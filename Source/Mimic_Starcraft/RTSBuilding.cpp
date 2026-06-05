@@ -2,6 +2,7 @@
 #include "RTSBuildingData.h"
 #include "Components/StaticMeshComponent.h"
 #include "RTSGridManager.h"
+#include "Net/UnrealNetwork.h"
 
 ARTSBuilding::ARTSBuilding()
 {
@@ -223,4 +224,36 @@ void ARTSBuilding::OnConstructionCompleted_Implementation()
         );
     }
     // Blueprint에서 완성 이펙트, 사운드, UI 업데이트 가능
+}
+
+void ARTSBuilding::OnRep_TeamInfo()
+{
+    ApplyTeamVisual();
+}
+
+void ARTSBuilding::ApplyTeamVisual()
+{
+    // 건물 머티리얼 색상 변경 처리
+}
+
+void ARTSBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(ARTSBuilding, TeamNumber);
+    DOREPLIFETIME(ARTSBuilding, TeamColor);
+}
+
+void ARTSBuilding::SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    TeamNumber = NewTeamNumber;
+    TeamColor = NewTeamColor;
+
+    // 서버 자신도 바로 시각 적용
+    OnRep_TeamInfo();
 }

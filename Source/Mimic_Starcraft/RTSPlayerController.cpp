@@ -280,6 +280,16 @@ void ARTSPlayerController::ConfirmBuild()
     CancelBuildMode();
 }
 
+void ARTSPlayerController::Client_SetStartCamera_Implementation(const FTransform& CameraTransform)
+{
+    APawn* ControlledPawn = GetPawn();
+    if (ControlledPawn)
+    {
+        ControlledPawn->SetActorTransform(CameraTransform);
+        SetControlRotation(CameraTransform.GetRotation().Rotator());
+    }
+}
+
 void ARTSPlayerController::CreatePreviewActor()
 {
     DestroyPreviewActor();

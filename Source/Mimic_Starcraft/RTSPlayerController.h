@@ -74,6 +74,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void ConfirmBuild();
 
+    UFUNCTION(Client, Reliable)
+    void Client_SetStartCamera(const FTransform& CameraTransform);
+
 private:
     bool GetMouseWorldLocation(FVector& OutLocation) const;
     void UpdateBuildingPreview();

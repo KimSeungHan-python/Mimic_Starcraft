@@ -2,6 +2,8 @@
 
 
 #include "RTSUnitBase.h"
+#include "Net/UnrealNetwork.h"
+#include "RTSPlayerState.h"
 
 // Sets default values
 ARTSUnitBase::ARTSUnitBase()
@@ -26,3 +28,33 @@ void ARTSUnitBase::Tick(float DeltaTime)
 
 }
 
+void ARTSUnitBase::OnRep_TeamInfo()
+{
+	ApplyTeamVisual();
+}
+
+void ARTSUnitBase::ApplyTeamVisual()
+{
+	// 여기서 머티리얼 색상 변경, 선택 원 색상 변경 등 처리
+}
+
+void ARTSUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(ARTSUnitBase, TeamNumber);
+    DOREPLIFETIME(ARTSUnitBase, TeamColor);
+}
+
+void ARTSUnitBase::SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    TeamNumber = NewTeamNumber;
+    TeamColor = NewTeamColor;
+
+    OnRep_TeamInfo();
+}

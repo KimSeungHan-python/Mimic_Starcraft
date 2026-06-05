@@ -26,7 +26,57 @@ public:
     {
         return X == Other.X && Y == Other.Y;
     }
+
+    bool operator!=(const FRTSGridCoord& Other) const
+    {
+        return !(*this == Other);
+    }
+
+    FRTSGridCoord operator+(const FRTSGridCoord& Other) const
+    {
+        return FRTSGridCoord(X + Other.X, Y + Other.Y);
+    }
+
+    FRTSGridCoord operator-(const FRTSGridCoord& Other) const
+    {
+        return FRTSGridCoord(X - Other.X, Y - Other.Y);
+    }
+
+    FRTSGridCoord& operator+=(const FRTSGridCoord& Other)
+    {
+        X += Other.X;
+        Y += Other.Y;
+        return *this;
+    }
+
+    FRTSGridCoord& operator-=(const FRTSGridCoord& Other)
+    {
+        X -= Other.X;
+        Y -= Other.Y;
+        return *this;
+    }
+
+    FRTSGridCoord operator*(int32 Scalar) const
+    {
+        return FRTSGridCoord(X * Scalar, Y * Scalar);
+    }
+
+    bool IsZero() const
+    {
+        return X == 0 && Y == 0;
+    }
+
+    FString ToString() const
+    {
+        return FString::Printf(TEXT("X=%d, Y=%d"), X, Y);
+    }
 };
+
+//이거 사용할지는 모르겟음 
+FORCEINLINE uint32 GetTypeHash(const FRTSGridCoord& Coord)
+{
+    return HashCombine(::GetTypeHash(Coord.X), ::GetTypeHash(Coord.Y));
+}
 
 USTRUCT(BlueprintType)
 struct FRTSGridCell
