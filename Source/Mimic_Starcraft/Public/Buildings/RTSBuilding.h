@@ -3,12 +3,17 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Types/RTSGridTypes.h"
+#include "Interfaces/RTSSelectableInterface.h"
 #include "RTSBuilding.generated.h"
 
 class URTSBuildingData;
+class URTSUnitData;
+class URTSProductionQueueComponent;
 class ARTSGridManager;
 class ARTSPlayerState;
 class UStaticMeshComponent;
+class ARTSPlayerController;
+class AController;
 class USceneComponent;
 
 UENUM(BlueprintType)
@@ -21,7 +26,7 @@ enum class ERTSBuildingState : uint8
 };
 
 UCLASS()
-class MIMIC_STARCRAFT_API ARTSBuilding : public AActor
+class MIMIC_STARCRAFT_API ARTSBuilding : public AActor, public IRTSSelectableInterface
 {
     GENERATED_BODY()
 
@@ -30,6 +35,7 @@ public:
 
 protected:
     virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 
 public:
@@ -40,6 +46,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* MeshComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<URTSProductionQueueComponent> ProductionQueueComponent;
 
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     URTSBuildingData* BuildingData;
@@ -81,6 +90,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void SetOwningGridManager(ARTSGridManager* InGridManager);
 
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Grid")
+    void RegisterToGrid();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Grid")
+    void UnregisterFromGrid();
+
 
     UPROPERTY(ReplicatedUsing = OnRep_BuildingState, BlueprintReadOnly, Category = "RTS Building|Construction")
     ERTSBuildingState BuildingState = ERTSBuildingState::Completed;
@@ -107,7 +122,13 @@ public:
     void CompleteConstruction();
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
+    void CancelConstruction(bool bRefundResources);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
     float GetBuildProgress01() const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
+    bool QueueUnitProduction(URTSUnitData* UnitData);
 
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();
@@ -120,10 +141,14 @@ public:
 
 private:
     bool bRegisteredOnLocalGrid = false;
+    bool bCompletedGridEffectsApplied = false;
 
 protected:
     void RefreshBuildingVisual();
     void RegisterToLocalGridIfNeeded();
+    void ApplyCompletedGridEffectsIfNeeded();
+    void RemoveCompletedGridEffectsIfNeeded();
+    FRTSGridCoord GetFootprintCenterCoord() const;
     ARTSGridManager* ResolveGridManager();
     float GetSyncedServerTimeSeconds() const;
 
@@ -139,6 +164,9 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
     TObjectPtr<ARTSPlayerState> OwningPlayerState;
 
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
+    bool bIsSelected = false;
+
     UFUNCTION()
     void OnRep_TeamInfo();
 
@@ -148,4 +176,12 @@ public:
 
     UFUNCTION()
     void SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor);
+
+    bool CanReceiveCommandsFrom(AController* Controller) const;
+
+    virtual bool CanBeSelectedBy_Implementation(ARTSPlayerController* SelectingController) const override;
+    virtual void SetSelectionState_Implementation(bool bSelected) override;
+    virtual bool IsSelected_Implementation() const override;
+    virtual int32 GetSelectableTeamNumber_Implementation() const override;
+    virtual bool IsOwnedByPlayerState_Implementation(ARTSPlayerState* PlayerState) const override;
 };

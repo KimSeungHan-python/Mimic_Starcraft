@@ -2,31 +2,65 @@
 
 
 #include "Units/RTSUnitBase.h"
+#include "Components/SceneComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/Controller.h"
 #include "Net/UnrealNetwork.h"
 #include "Core/RTSPlayerState.h"
+#include "Data/RTSUnitData.h"
 
-// Sets default values
 ARTSUnitBase::ARTSUnitBase()
 {
- 	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	RootComponent = SceneRoot;
+
+	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+	MeshComponent->SetupAttachment(SceneRoot);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
+	MeshComponent->SetCanEverAffectNavigation(true);
 }
 
-// Called when the game starts or when spawned
-void ARTSUnitBase::BeginPlay()
+void ARTSUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	Super::BeginPlay();
+    if (HasAuthority() && bCountsTowardSupply && OwningPlayerState && SupplyCost > 0)
+    {
+        OwningPlayerState->ReleaseSupply(SupplyCost);
+        bCountsTowardSupply = false;
+    }
 
-	
+    Super::EndPlay(EndPlayReason);
 }
 
-// Called every frame
 void ARTSUnitBase::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime);
+    Super::Tick(DeltaTime);
 
+    if (!HasAuthority() || !bHasMoveTarget)
+    {
+        return;
+    }
+
+    const FVector CurrentLocation = GetActorLocation();
+    FVector Direction = MoveTargetLocation - CurrentLocation;
+    Direction.Z = 0.0f;
+
+    const float Distance = Direction.Size();
+    if (Distance <= MovementAcceptanceRadius)
+    {
+        StopMovement();
+        return;
+    }
+
+    Direction /= Distance;
+    const float Step = FMath::Min(Distance, MovementSpeed * DeltaTime);
+    SetActorLocation(CurrentLocation + Direction * Step, true);
+    SetActorRotation(Direction.Rotation());
 }
+
 
 void ARTSUnitBase::OnRep_TeamInfo()
 {
@@ -44,6 +78,110 @@ void ARTSUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 
     DOREPLIFETIME(ARTSUnitBase, TeamNumber);
     DOREPLIFETIME(ARTSUnitBase, TeamColor);
+    DOREPLIFETIME(ARTSUnitBase, OwningPlayerState);
+    DOREPLIFETIME(ARTSUnitBase, bHasMoveTarget);
+    DOREPLIFETIME(ARTSUnitBase, MoveTargetLocation);
+    DOREPLIFETIME(ARTSUnitBase, SupplyCost);
+    DOREPLIFETIME(ARTSUnitBase, bCountsTowardSupply);
+}
+
+void ARTSUnitBase::IssueMoveCommand(const FVector& TargetLocation)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    MoveTargetLocation = TargetLocation;
+    bHasMoveTarget = true;
+    SetActorTickEnabled(true);
+}
+
+void ARTSUnitBase::StopMovement()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    bHasMoveTarget = false;
+    SetActorTickEnabled(false);
+}
+
+bool ARTSUnitBase::HasReachedLocation(const FVector& TargetLocation, float AcceptanceRadius) const
+{
+    FVector Delta = TargetLocation - GetActorLocation();
+    Delta.Z = 0.0f;
+    return Delta.SizeSquared() <= FMath::Square(AcceptanceRadius);
+}
+
+bool ARTSUnitBase::RegisterSupplyCost(int32 InSupplyCost, bool bAlreadyReserved)
+{
+    if (!HasAuthority())
+    {
+        return false;
+    }
+
+    if (bCountsTowardSupply)
+    {
+        return true;
+    }
+
+    const int32 ClampedSupplyCost = FMath::Max(0, InSupplyCost);
+    if (ClampedSupplyCost <= 0)
+    {
+        SupplyCost = 0;
+        bCountsTowardSupply = false;
+        return true;
+    }
+
+    if (!OwningPlayerState)
+    {
+        return false;
+    }
+
+    if (!bAlreadyReserved && !OwningPlayerState->TryReserveSupply(ClampedSupplyCost))
+    {
+        return false;
+    }
+
+    SupplyCost = ClampedSupplyCost;
+    bCountsTowardSupply = true;
+    return true;
+}
+
+bool ARTSUnitBase::CanReceiveCommandsFrom(AController* Controller) const
+{
+    const ARTSPlayerState* PlayerState = Controller
+        ? Controller->GetPlayerState<ARTSPlayerState>()
+        : nullptr;
+
+    return PlayerState && TeamNumber == PlayerState->TeamNumber;
+}
+
+bool ARTSUnitBase::CanBeSelectedBy_Implementation(ARTSPlayerController* SelectingController) const
+{
+    return true;
+}
+
+void ARTSUnitBase::SetSelectionState_Implementation(bool bSelected)
+{
+    bIsSelected = bSelected;
+}
+
+bool ARTSUnitBase::IsSelected_Implementation() const
+{
+    return bIsSelected;
+}
+
+int32 ARTSUnitBase::GetSelectableTeamNumber_Implementation() const
+{
+    return TeamNumber;
+}
+
+bool ARTSUnitBase::IsOwnedByPlayerState_Implementation(ARTSPlayerState* PlayerState) const
+{
+    return PlayerState && TeamNumber == PlayerState->TeamNumber;
 }
 
 void ARTSUnitBase::SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor)

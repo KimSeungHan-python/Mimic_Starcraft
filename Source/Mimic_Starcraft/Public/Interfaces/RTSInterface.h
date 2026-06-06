@@ -9,6 +9,7 @@
 //class APlayerStartCamp;
 class ARTSBuilding;
 class ARTSUnitBase;
+class UUserWidget;
 // This class does not need to be modified.
 
 UINTERFACE(BlueprintType)

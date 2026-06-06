@@ -1,6 +1,8 @@
 #include "Grid/RTSGridManager.h"
 #include "DrawDebugHelpers.h"
 #include "Data/RTSBuildingData.h"
+#include "Resources/RTSVespeneGeyser.h"
+#include "EngineUtils.h"
 
 ARTSGridManager::ARTSGridManager()
 {
@@ -18,6 +20,12 @@ void ARTSGridManager::BeginPlay()
 
     // 그리드 시작
     InitializeGrid();
+
+    for (TActorIterator<ARTSVespeneGeyser> It(GetWorld()); It; ++It)
+    {
+        const FRTSGridCoord GeyserCoord = WorldToGrid(It->GetActorLocation());
+        MarkVespeneGeyser(GeyserCoord, true);
+    }
 
 
 
@@ -305,6 +313,11 @@ bool ARTSGridManager::IsCellPlaceable(FRTSGridCoord Coord) const
 
 bool ARTSGridManager::CanPlaceBuilding(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
 {
+    if (Width <= 0 || Height <= 0)
+    {
+        return false;
+    }
+
     float MinZ = TNumericLimits<float>::Max();
     float MaxZ = -TNumericLimits<float>::Max();
 
@@ -485,6 +498,10 @@ bool ARTSGridManager::CanPlaceBuildingByData(FRTSGridCoord OriginCoord, URTSBuil
             return false;
         }
     }
+    else if (DoesFootprintOverlapVespeneGeyser(OriginCoord, Width, Height))
+    {
+        return false;
+    }
 
     return true;
 }
@@ -543,6 +560,39 @@ bool ARTSGridManager::IsFootprintOnCreep(FRTSGridCoord OriginCoord, int32 Width,
     }
 
     return true;
+}
+
+bool ARTSGridManager::DoesFootprintOverlapVespeneGeyser(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
+{
+    for (int32 Y = 0; Y < Height; ++Y)
+    {
+        for (int32 X = 0; X < Width; ++X)
+        {
+            const FRTSGridCoord Coord(
+                OriginCoord.X + X,
+                OriginCoord.Y + Y
+            );
+
+            if (!IsValidCoord(Coord))
+            {
+                return false;
+            }
+
+            const int32 Index = CoordToIndex(Coord);
+
+            if (!Cells.IsValidIndex(Index))
+            {
+                return false;
+            }
+
+            if (Cells[Index].bHasVespeneGeyser)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 bool ARTSGridManager::IsFootprintOnVespeneGeyser(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const

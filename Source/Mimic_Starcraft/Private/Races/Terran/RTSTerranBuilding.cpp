@@ -1,30 +1,37 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "Races/Terran/RTSTerranBuilding.h"
+
 #include "Data/RTSBuildingData.h"
 #include "Grid/RTSGridManager.h"
+
+#include "Components/PrimitiveComponent.h"
 
 bool ARTSTerranBuilding::CanLiftOff() const
 {
     return BuildingData
         && BuildingData->bCanLiftOff
-        && BuildingState == ERTSBuildingState::Completed
-        && OwningGridManager;
+        && BuildingState == ERTSBuildingState::Completed;
 }
 
 void ARTSTerranBuilding::LiftOff()
 {
-    if (!CanLiftOff())
+    if (!HasAuthority() || !CanLiftOff())
     {
         return;
     }
 
-    OwningGridManager->ReleaseBuildingCells(
-        GridOriginCoord,
-        GridWidth,
-        GridHeight
-    );
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    if (!OwningGridManager)
+    {
+        return;
+    }
+
+    UnregisterFromGrid();
 
     SetActorLocation(
         GetActorLocation() + FVector(0.0f, 0.0f, BuildingData->LiftOffHeight)
@@ -43,8 +50,11 @@ void ARTSTerranBuilding::LiftOff()
         }
 
         PrimComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        PrimComp->SetGenerateOverlapEvents(false);
         PrimComp->SetCanEverAffectNavigation(false);
     }
+
+    OnRep_BuildingState();
 }
 
 bool ARTSTerranBuilding::CanLandAt(FRTSGridCoord TargetOriginCoord) const
@@ -67,32 +77,37 @@ bool ARTSTerranBuilding::CanLandAt(FRTSGridCoord TargetOriginCoord) const
 
 void ARTSTerranBuilding::LandAt(FRTSGridCoord TargetOriginCoord)
 {
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
     if (!CanLandAt(TargetOriginCoord))
     {
         return;
     }
 
     FVector LandLocation;
-
-    OwningGridManager->GetBuildingCenterLocationOnGround(
+    if (!OwningGridManager->GetBuildingCenterLocationOnGround(
         TargetOriginCoord,
         GridWidth,
         GridHeight,
         LandLocation
-    );
+    ))
+    {
+        return;
+    }
 
     SetActorLocation(LandLocation);
 
     GridOriginCoord = TargetOriginCoord;
-
-    OwningGridManager->OccupyBuildingCells(
-        GridOriginCoord,
-        GridWidth,
-        GridHeight,
-        GetUniqueID()
-    );
-
     BuildingState = ERTSBuildingState::Completed;
+    RegisterToGrid();
 
     TArray<UPrimitiveComponent*> PrimitiveComponents;
     GetComponents<UPrimitiveComponent>(PrimitiveComponents);
@@ -105,6 +120,9 @@ void ARTSTerranBuilding::LandAt(FRTSGridCoord TargetOriginCoord)
         }
 
         PrimComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        PrimComp->SetGenerateOverlapEvents(true);
         PrimComp->SetCanEverAffectNavigation(true);
     }
+
+    OnRep_BuildingState();
 }

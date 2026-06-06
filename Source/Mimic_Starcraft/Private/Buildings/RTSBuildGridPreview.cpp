@@ -81,6 +81,12 @@ void ARTSBuildGridPreview::UpdateFootprint(
         return;
     }
 
+    if (Width <= 0 || Height <= 0)
+    {
+        HidePreview();
+        return;
+    }
+
     const int32 Padding = FMath::Max(0, PreviewPaddingCells);
 
     const int32 AreaWidth = Width + Padding * 2;

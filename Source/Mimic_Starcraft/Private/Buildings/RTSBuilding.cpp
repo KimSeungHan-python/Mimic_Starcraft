@@ -1,17 +1,22 @@
 #include "Buildings/RTSBuilding.h"
+#include "Components/RTSProductionQueueComponent.h"
+#include "Core/RTSPlayerState.h"
 #include "Data/RTSBuildingData.h"
+#include "Data/RTSUnitData.h"
 #include "Grid/RTSGridManager.h"
 
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 
 ARTSBuilding::ARTSBuilding()
 {
     PrimaryActorTick.bCanEverTick = true;
+    PrimaryActorTick.bStartWithTickEnabled = false;
 
     SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
     RootComponent = SceneRoot;
@@ -22,6 +27,8 @@ ARTSBuilding::ARTSBuilding()
     MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
     MeshComponent->SetCanEverAffectNavigation(true);
+
+    ProductionQueueComponent = CreateDefaultSubobject<URTSProductionQueueComponent>(TEXT("ProductionQueueComponent"));
 }
 
 void ARTSBuilding::BeginPlay()
@@ -39,6 +46,14 @@ void ARTSBuilding::BeginPlay()
     {
         RegisterToLocalGridIfNeeded();
     }
+
+    SetActorTickEnabled(HasAuthority() && BuildingState == ERTSBuildingState::UnderConstruction);
+}
+
+void ARTSBuilding::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    UnregisterFromGrid();
+    Super::EndPlay(EndPlayReason);
 }
 
 void ARTSBuilding::Tick(float DeltaTime)
@@ -78,6 +93,7 @@ void ARTSBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(ARTSBuilding, BuildStartServerTime);
     DOREPLIFETIME(ARTSBuilding, TeamNumber);
     DOREPLIFETIME(ARTSBuilding, TeamColor);
+    DOREPLIFETIME(ARTSBuilding, OwningPlayerState);
 }
 
 void ARTSBuilding::InitializeBuilding(
@@ -102,6 +118,8 @@ void ARTSBuilding::InitializeBuilding(
     {
         RegisterToLocalGridIfNeeded();
     }
+
+    SetActorTickEnabled(HasAuthority() && BuildingState == ERTSBuildingState::UnderConstruction);
 }
 
 void ARTSBuilding::FitMeshToGridFootprint(float CellSize)
@@ -176,9 +194,13 @@ void ARTSBuilding::BeginConstruction(float InBuildTime)
 
 
     BuildTime = FMath::Max(0.01f, InBuildTime);
+    CurrentBuildTime = 0.0f;
     BuildStartServerTime = GetSyncedServerTimeSeconds();
     BuildingState = ERTSBuildingState::UnderConstruction;
+    RegisterToGrid();
     bIsCompleted = false;
+    bCompletedGridEffectsApplied = false;
+    SetActorTickEnabled(true);
 
     OnRep_BuildingState();
 }
@@ -194,13 +216,41 @@ void ARTSBuilding::CompleteConstruction()
     bIsCompleted = true;
 
     BuildingState = ERTSBuildingState::Completed;
+    SetActorTickEnabled(false);
+    RegisterToGrid();
 
     OnRep_BuildingState();
     OnConstructionCompleted();
 }
 
+void ARTSBuilding::CancelConstruction(bool bRefundResources)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    if (bRefundResources
+        && BuildingState == ERTSBuildingState::UnderConstruction
+        && OwningPlayerState
+        && BuildingData)
+    {
+        OwningPlayerState->AddResources(
+            BuildingData->MineralCost,
+            BuildingData->VespeneCost
+        );
+    }
+
+    Destroy();
+}
+
 void ARTSBuilding::SetPreviewBuildingMode(bool bPreview)
 {
+    if (bPreview)
+    {
+        UnregisterFromGrid();
+    }
+
     bIsPreviewBuilding = bPreview;
 
     if (bIsPreviewBuilding)
@@ -250,11 +300,27 @@ void ARTSBuilding::OnRep_BuildingSetup()
     {
         RegisterToLocalGridIfNeeded();
     }
+
+    SetActorTickEnabled(HasAuthority() && BuildingState == ERTSBuildingState::UnderConstruction);
 }
 
 void ARTSBuilding::OnRep_BuildingState()
 {
     RefreshBuildingVisual();
+
+    if (BuildingState == ERTSBuildingState::UnderConstruction)
+    {
+        RegisterToGrid();
+    }
+    else if (BuildingState == ERTSBuildingState::Completed)
+    {
+        RegisterToGrid();
+        ApplyCompletedGridEffectsIfNeeded();
+    }
+    else if (BuildingState == ERTSBuildingState::Flying)
+    {
+        UnregisterFromGrid();
+    }
 }
 
 
@@ -277,6 +343,11 @@ void ARTSBuilding::RefreshBuildingVisual()
 }
 
 void ARTSBuilding::RegisterToLocalGridIfNeeded()
+{
+    RegisterToGrid();
+}
+
+void ARTSBuilding::RegisterToGrid()
 {
     if (bIsPreviewBuilding)
     {
@@ -320,7 +391,54 @@ void ARTSBuilding::RegisterToLocalGridIfNeeded()
         GetUniqueID()
     );
 
+    if (BuildingData->bMustBuildOnVespeneGeyser)
+    {
+        const FRTSGridCoord CenterCoord = GetFootprintCenterCoord();
+        OwningGridManager->SetVespeneOccupied(CenterCoord, true);
+    }
+
     bRegisteredOnLocalGrid = true;
+}
+
+void ARTSBuilding::UnregisterFromGrid()
+{
+    if (bIsPreviewBuilding)
+    {
+        return;
+    }
+
+    if (!bRegisteredOnLocalGrid && !bCompletedGridEffectsApplied)
+    {
+        return;
+    }
+
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    if (!OwningGridManager)
+    {
+        return;
+    }
+
+    RemoveCompletedGridEffectsIfNeeded();
+
+    if (bRegisteredOnLocalGrid)
+    {
+        OwningGridManager->ReleaseBuildingCells(
+            GridOriginCoord,
+            GridWidth,
+            GridHeight
+        );
+
+        if (BuildingData && BuildingData->bMustBuildOnVespeneGeyser)
+        {
+            OwningGridManager->SetVespeneOccupied(GetFootprintCenterCoord(), false);
+        }
+
+        bRegisteredOnLocalGrid = false;
+    }
 }
 
 ARTSGridManager* ARTSBuilding::ResolveGridManager()
@@ -361,6 +479,31 @@ void ARTSBuilding::SetOwningGridManager(ARTSGridManager* InGridManager)
 }
 
 
+bool ARTSBuilding::QueueUnitProduction(URTSUnitData* UnitData)
+{
+    if (!HasAuthority() || !ProductionQueueComponent || !BuildingData || !UnitData)
+    {
+        return false;
+    }
+
+    bool bCanTrainUnit = false;
+    for (URTSUnitData* TrainableUnit : BuildingData->TrainableUnits)
+    {
+        if (TrainableUnit == UnitData)
+        {
+            bCanTrainUnit = true;
+            break;
+        }
+    }
+
+    if (!bCanTrainUnit)
+    {
+        return false;
+    }
+
+    return ProductionQueueComponent->QueueUnit(UnitData, OwningPlayerState);
+}
+
 float ARTSBuilding::GetBuildProgress01() const
 {
     if (BuildingState == ERTSBuildingState::Completed)
@@ -384,17 +527,26 @@ float ARTSBuilding::GetBuildProgress01() const
     return FMath::Clamp(Elapsed / BuildTime, 0.0f, 1.0f);
 }
 
-void ARTSBuilding::OnConstructionCompleted_Implementation()
+void ARTSBuilding::ApplyCompletedGridEffectsIfNeeded()
 {
-    if (!BuildingData || !OwningGridManager)
+    if (bCompletedGridEffectsApplied
+        || !BuildingData
+        || BuildingState != ERTSBuildingState::Completed)
     {
         return;
     }
 
-    const FRTSGridCoord CenterCoord(
-        GridOriginCoord.X + GridWidth / 2,
-        GridOriginCoord.Y + GridHeight / 2
-    );
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    if (!OwningGridManager)
+    {
+        return;
+    }
+
+    const FRTSGridCoord CenterCoord = GetFootprintCenterCoord();
 
     if (BuildingData->bProvidesPower)
     {
@@ -411,7 +563,62 @@ void ARTSBuilding::OnConstructionCompleted_Implementation()
             BuildingData->CreepRadiusCells
         );
     }
-    // Blueprint에서 완성 이펙트, 사운드, UI 업데이트 가능
+
+    if (OwningPlayerState && BuildingData->SupplyProvided > 0)
+    {
+        OwningPlayerState->AddSupplyCap(BuildingData->SupplyProvided);
+    }
+
+    bCompletedGridEffectsApplied = true;
+}
+
+void ARTSBuilding::RemoveCompletedGridEffectsIfNeeded()
+{
+    if (!bCompletedGridEffectsApplied || !BuildingData)
+    {
+        return;
+    }
+
+    if (!OwningGridManager)
+    {
+        OwningGridManager = ResolveGridManager();
+    }
+
+    if (!OwningGridManager)
+    {
+        return;
+    }
+
+    const FRTSGridCoord CenterCoord = GetFootprintCenterCoord();
+
+    if (BuildingData->bProvidesPower)
+    {
+        OwningGridManager->RemovePowerInRadius(
+            CenterCoord,
+            BuildingData->PowerRadiusCells
+        );
+    }
+
+    if (OwningPlayerState && BuildingData->SupplyProvided > 0)
+    {
+        OwningPlayerState->RemoveSupplyCap(BuildingData->SupplyProvided);
+    }
+
+    // Creep is additive until the grid stores source counts per cell.
+    bCompletedGridEffectsApplied = false;
+}
+
+FRTSGridCoord ARTSBuilding::GetFootprintCenterCoord() const
+{
+    return FRTSGridCoord(
+        GridOriginCoord.X + GridWidth / 2,
+        GridOriginCoord.Y + GridHeight / 2
+    );
+}
+
+void ARTSBuilding::OnConstructionCompleted_Implementation()
+{
+    ApplyCompletedGridEffectsIfNeeded();
 }
 
 void ARTSBuilding::OnRep_TeamInfo()
@@ -424,6 +631,40 @@ void ARTSBuilding::ApplyTeamVisual()
     // 건물 머티리얼 색상 변경 처리
 }
 
+
+bool ARTSBuilding::CanReceiveCommandsFrom(AController* Controller) const
+{
+    const ARTSPlayerState* PlayerState = Controller
+        ? Controller->GetPlayerState<ARTSPlayerState>()
+        : nullptr;
+
+    return PlayerState && TeamNumber == PlayerState->TeamNumber;
+}
+
+bool ARTSBuilding::CanBeSelectedBy_Implementation(ARTSPlayerController* SelectingController) const
+{
+    return !bIsPreviewBuilding;
+}
+
+void ARTSBuilding::SetSelectionState_Implementation(bool bSelected)
+{
+    bIsSelected = bSelected;
+}
+
+bool ARTSBuilding::IsSelected_Implementation() const
+{
+    return bIsSelected;
+}
+
+int32 ARTSBuilding::GetSelectableTeamNumber_Implementation() const
+{
+    return TeamNumber;
+}
+
+bool ARTSBuilding::IsOwnedByPlayerState_Implementation(ARTSPlayerState* PlayerState) const
+{
+    return PlayerState && TeamNumber == PlayerState->TeamNumber;
+}
 
 void ARTSBuilding::SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor)
 {

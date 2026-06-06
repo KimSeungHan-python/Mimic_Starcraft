@@ -5,6 +5,7 @@
 #include "RTSBuildingData.generated.h"
 
 class ARTSBuilding;
+class URTSUnitData;
 
 UENUM(BlueprintType)
 enum class ERTSBuildingRace : uint8
@@ -42,9 +43,21 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
     UStaticMesh* PreviewStaticMesh = nullptr;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Production")
+    TArray<TObjectPtr<URTSUnitData>> TrainableUnits;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Supply")
+    int32 SupplyProvided = 0;
+
     // 건설 시간
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Construction")
     float BuildTime = 10.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Cost")
+    int32 MineralCost = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Cost")
+    int32 VespeneCost = 0;
 
     // 테란 건물용
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Terran")
@@ -76,4 +89,10 @@ public:
     // 베스핀 건물용
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Resource")
     bool bMustBuildOnVespeneGeyser = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Resource")
+    bool bAcceptsMineralDropOff = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Resource")
+    bool bAcceptsVespeneDropOff = false;
 };

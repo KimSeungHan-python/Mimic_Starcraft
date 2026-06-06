@@ -9,6 +9,9 @@
 ARTSVespeneGeyser::ARTSVespeneGeyser()
 {
     PrimaryActorTick.bCanEverTick = false;
+    ResourceType = ERTSResourceType::Vespene;
+    MaxAmount = 2250;
+    RemainingAmount = MaxAmount;
 }
 
 void ARTSVespeneGeyser::BeginPlay()
@@ -20,6 +23,11 @@ void ARTSVespeneGeyser::BeginPlay()
 
 void ARTSVespeneGeyser::RegisterToGrid()
 {
+    if (!GetWorld())
+    {
+        return;
+    }
+
     if (!GridManager)
     {
         for (TActorIterator<ARTSGridManager> It(GetWorld()); It; ++It)

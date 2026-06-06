@@ -122,18 +122,4 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bVespeneOccupied = false;
 
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    //float Height;
-
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    //bool bHasCreep;
-
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    //bool bHasPower;
-
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    //bool bIsResourceBlocked;
-
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite)
-    //bool bIsRamp;
 };

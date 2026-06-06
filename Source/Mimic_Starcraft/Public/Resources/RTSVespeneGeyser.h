@@ -3,14 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
+#include "Resources/RTSResourceNode.h"
 #include "Types/RTSGridTypes.h"
 #include "RTSVespeneGeyser.generated.h"
 
 class ARTSGridManager;
 
 UCLASS()
-class MIMIC_STARCRAFT_API ARTSVespeneGeyser : public AActor
+class MIMIC_STARCRAFT_API ARTSVespeneGeyser : public ARTSResourceNode
 {
 	GENERATED_BODY()
 	

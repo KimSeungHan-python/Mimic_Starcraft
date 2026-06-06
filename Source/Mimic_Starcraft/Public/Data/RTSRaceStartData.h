@@ -9,6 +9,7 @@
 
 class ARTSUnitBase;
 class ARTSBuilding;
+class URTSBuildingData;
 class AActor;
 
 UCLASS(BlueprintType)
@@ -23,11 +24,26 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<ARTSBuilding> MainBaseClass;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Base")
+	TObjectPtr<URTSBuildingData> MainBaseBuildingData;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<ARTSUnitBase> WorkerClass;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	int32 InitialWorkerCount = 12;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Resources")
+	int32 InitialMinerals = 50;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Resources")
+	int32 InitialVespene = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Supply")
+	int32 InitialSupplyCap = 15;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Supply")
+	int32 InitialWorkerSupplyCost = 1;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Zerg")
 	TSubclassOf<AActor> InitialCreepActorClass;

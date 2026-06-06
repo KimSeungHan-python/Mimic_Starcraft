@@ -5,7 +5,10 @@
 #include "Buildings/RTSStartCamp.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSRaceStartData.h"
+#include "Data/RTSBuildingData.h"
 #include "Core/RTSPlayerController.h"
+#include "Core/RTSHUD.h"
+#include "Grid/RTSGridManager.h"
 #include "Units/RTSUnitBase.h"
 #include "Buildings/RTSBuilding.h"
 
@@ -15,6 +18,7 @@
 ARTSGameModeBase::ARTSGameModeBase()
 {
 	PlayerStateClass = ARTSPlayerState::StaticClass();
+	HUDClass = ARTSHUD::StaticClass();
 
 	TeamColors =
 	{
@@ -150,6 +154,12 @@ void ARTSGameModeBase::InitializePlayerState(APlayerController* NewPlayer, ARTSS
 	const ERTSRace Race = GetRaceForPlayer(NewPlayer);
 
 	PS->SetTeamInfo(TeamNumber, TeamColor, Race, Camp->CampIndex);
+
+	if (URTSRaceStartData* StartData = GetStartData(Race))
+	{
+		PS->SetResources(StartData->InitialMinerals, StartData->InitialVespene);
+		PS->SetSupplyCap(StartData->InitialSupplyCap);
+	}
 }
 
 void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, ARTSStartCamp* Camp)
@@ -178,27 +188,80 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 		return;
 	}
 
-	ARTSBuilding* MainBase = nullptr;
-	const FTransform BaseTransform = Camp->GetMainBaseWorldTransform();
+	ARTSGridManager* GridManager = Camp->GridManager;
+	if (!GridManager)
+	{
+		for (TActorIterator<ARTSGridManager> It(World); It; ++It)
+		{
+			GridManager = *It;
+			break;
+		}
+	}
 
-	if (StartData->MainBaseClass)
+	URTSBuildingData* MainBaseData = StartData->MainBaseBuildingData;
+	TSubclassOf<ARTSBuilding> MainBaseClass = MainBaseData && MainBaseData->BuildingClass
+		? MainBaseData->BuildingClass
+		: StartData->MainBaseClass;
+
+	FTransform BaseTransform = Camp->GetMainBaseWorldTransform();
+	FRTSGridCoord BaseOriginCoord = Camp->AnchorCellCoord + Camp->MainBaseOffsetCellCoord;
+	int32 BaseWidth = 1;
+	int32 BaseHeight = 1;
+
+	if (MainBaseData && GridManager)
+	{
+		BaseWidth = FMath::Max(1, MainBaseData->GridWidth);
+		BaseHeight = FMath::Max(1, MainBaseData->GridHeight);
+
+		const FRTSGridCoord BaseCenterCoord = Camp->AnchorCellCoord + Camp->MainBaseOffsetCellCoord;
+		BaseOriginCoord = FRTSGridCoord(
+			BaseCenterCoord.X - BaseWidth / 2,
+			BaseCenterCoord.Y - BaseHeight / 2
+		);
+
+		FVector BaseLocation;
+		if (GridManager->GetBuildingCenterLocationOnGround(BaseOriginCoord, BaseWidth, BaseHeight, BaseLocation))
+		{
+			BaseTransform.SetLocation(BaseLocation);
+		}
+	}
+
+	ARTSBuilding* MainBase = nullptr;
+	if (MainBaseClass)
 	{
 		MainBase = World->SpawnActorDeferred<ARTSBuilding>(
-			StartData->MainBaseClass,
+			MainBaseClass,
 			BaseTransform,
 			nullptr,
 			nullptr,
 			ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn
 		);
 
-		//색깔 가져오기
 		if (MainBase)
 		{
 			MainBase->TeamNumber = PS->TeamNumber;
 			MainBase->TeamColor = PS->TeamColor;
 			MainBase->OwningPlayerState = PS;
 
-			UGameplayStatics::FinishSpawningActor(MainBase, Camp->GetMainBaseWorldTransform());
+			if (MainBaseData && GridManager)
+			{
+				MainBase->InitializeBuilding(
+					MainBaseData,
+					BaseOriginCoord,
+					BaseWidth,
+					BaseHeight,
+					GridManager->CellSize,
+					GridManager
+				);
+			}
+
+			UGameplayStatics::FinishSpawningActor(MainBase, BaseTransform);
+
+			if (MainBaseData && GridManager)
+			{
+				MainBase->SetPreviewBuildingMode(false);
+				MainBase->CompleteConstruction();
+			}
 		}
 	}
 
@@ -213,7 +276,6 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 
 		const FTransform WorkerTransform = Camp->GetWorkerWorldTransform(i);
 
-		//일꾼
 		ARTSUnitBase* Worker = World->SpawnActorDeferred<ARTSUnitBase>(
 			StartData->WorkerClass,
 			WorkerTransform,
@@ -227,6 +289,7 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 			Worker->TeamNumber = PS->TeamNumber;
 			Worker->TeamColor = PS->TeamColor;
 			Worker->OwningPlayerState = PS;
+			Worker->RegisterSupplyCost(StartData->InitialWorkerSupplyCost, false);
 
 			UGameplayStatics::FinishSpawningActor(Worker, WorkerTransform);
 		}
@@ -252,20 +315,24 @@ void ARTSGameModeBase::ApplyRaceStartEffect(APlayerController* NewPlayer, ARTSSt
 	{
 	case ERTSRace::Zerg:
 	{
+		const FTransform CreepTransform = Camp->GetCreepCenterWorldTransform();
+
 		if (StartData->InitialCreepActorClass)
 		{
-			FTransform CreepTransform = Camp->GetCreepCenterWorldTransform();
-
-			AActor* CreepActor = GetWorld()->SpawnActor<AActor>(
+			GetWorld()->SpawnActor<AActor>(
 				StartData->InitialCreepActorClass,
 				CreepTransform
 			);
-
-			// 더 좋은 방식:
-			// GridManager 또는 CreepManager가 있다면 여기서
-			// AddCreepInRadius(CreepCenter, Camp->InitialCreepRadius, PS->TeamNumber);
 		}
 
+		if (Camp->GridManager)
+		{
+			const float CellSize = FMath::Max(KINDA_SMALL_NUMBER, Camp->GridManager->CellSize);
+			const int32 RadiusCells = FMath::Max(0, FMath::CeilToInt(Camp->InitialCreepRadius / CellSize));
+			const FRTSGridCoord CreepCenterCoord = Camp->GridManager->WorldToGrid(CreepTransform.GetLocation());
+
+			Camp->GridManager->AddCreepInRadius(CreepCenterCoord, RadiusCells);
+		}
 		break;
 	}
 

@@ -144,6 +144,8 @@ public:
     void SetVespeneOccupied(FRTSGridCoord Coord, bool bOccupied);
 
 private:
+    bool DoesFootprintOverlapVespeneGeyser(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const;
+
     int32 CoordToIndex(FRTSGridCoord Coord) const;
 
     bool TraceGroundAt(FVector XYWorldLocation, FHitResult& OutHit) const;
