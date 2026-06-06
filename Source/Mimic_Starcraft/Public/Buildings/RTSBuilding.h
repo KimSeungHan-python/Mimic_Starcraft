@@ -12,6 +12,7 @@ class URTSProductionQueueComponent;
 class ARTSGridManager;
 class ARTSPlayerState;
 class UStaticMeshComponent;
+class UMeshComponent;
 class ARTSPlayerController;
 class AController;
 class USceneComponent;
@@ -151,6 +152,7 @@ private:
 
 protected:
     void RefreshBuildingVisual();
+    void ApplyTeamVisualToMesh(UMeshComponent* TargetMesh);
     void RegisterToLocalGridIfNeeded();
     void ApplyCompletedGridEffectsIfNeeded();
     void RemoveCompletedGridEffectsIfNeeded();
@@ -166,6 +168,15 @@ public:
 
     UPROPERTY(ReplicatedUsing = OnRep_TeamInfo, BlueprintReadOnly, Category = "RTS Team")
     FLinearColor TeamColor = FLinearColor::White;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+    bool bApplyTeamColorToMaterials = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+    FName TeamColorMaterialParameterName = TEXT("TeamColor");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+    FName TeamNumberMaterialParameterName = TEXT("TeamNumber");
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
     TObjectPtr<ARTSPlayerState> OwningPlayerState;

@@ -2,6 +2,7 @@
 
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Grid/RTSGridManager.h"
 #include "Net/UnrealNetwork.h"
 
 ARTSResourceNode::ARTSResourceNode()
@@ -57,6 +58,20 @@ int32 ARTSResourceNode::Harvest(int32 RequestedAmount)
 FVector ARTSResourceNode::GetGatherLocation() const
 {
     return GetActorTransform().TransformPosition(GatherPointLocalOffset);
+}
+
+FRTSGridCoord ARTSResourceNode::GetGridOriginCoord(ARTSGridManager* GridManager) const
+{
+    if (!GridManager)
+    {
+        return FRTSGridCoord();
+    }
+
+    const FRTSGridCoord CenterCoord = GridManager->WorldToGrid(GetActorLocation());
+    return FRTSGridCoord(
+        CenterCoord.X - FMath::Max(1, GridWidth) / 2,
+        CenterCoord.Y - FMath::Max(1, GridHeight) / 2
+    );
 }
 
 void ARTSResourceNode::OnRep_RemainingAmount()

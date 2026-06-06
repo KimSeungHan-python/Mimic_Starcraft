@@ -2,8 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Types/RTSGridTypes.h"
 #include "RTSResourceNode.generated.h"
 
+class ARTSGridManager;
 class USceneComponent;
 class UStaticMeshComponent;
 
@@ -42,6 +44,15 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Resource")
     FVector GatherPointLocalOffset = FVector::ZeroVector;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Resource|Grid")
+    bool bBlocksBuildingPlacement = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Resource|Grid", meta = (ClampMin = "1"))
+    int32 GridWidth = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Resource|Grid", meta = (ClampMin = "1"))
+    int32 GridHeight = 1;
+
     UFUNCTION(BlueprintCallable, Category = "RTS Resource")
     bool HasResources() const;
 
@@ -50,6 +61,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "RTS Resource")
     FVector GetGatherLocation() const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Resource|Grid")
+    FRTSGridCoord GetGridOriginCoord(ARTSGridManager* GridManager) const;
 
 protected:
     virtual void BeginPlay() override;

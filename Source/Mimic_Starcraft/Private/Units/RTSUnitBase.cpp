@@ -2,9 +2,12 @@
 
 
 #include "Units/RTSUnitBase.h"
+#include "Components/MeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Controller.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSUnitData.h"
@@ -22,6 +25,21 @@ ARTSUnitBase::ARTSUnitBase()
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
 	MeshComponent->SetCanEverAffectNavigation(true);
+
+	SkeletalMeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMeshComponent"));
+	SkeletalMeshComponent->SetupAttachment(SceneRoot);
+	SkeletalMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SkeletalMeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
+	SkeletalMeshComponent->SetCanEverAffectNavigation(false);
+	SkeletalMeshComponent->SetHiddenInGame(true);
+	SkeletalMeshComponent->SetVisibility(false);
+}
+
+void ARTSUnitBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	RefreshUnitVisual();
 }
 
 void ARTSUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -67,11 +85,112 @@ void ARTSUnitBase::OnRep_TeamInfo()
 	ApplyTeamVisual();
 }
 
-void ARTSUnitBase::ApplyTeamVisual()
+void ARTSUnitBase::OnRep_UnitData()
 {
-	// 여기서 머티리얼 색상 변경, 선택 원 색상 변경 등 처리
+	RefreshUnitVisual();
 }
 
+void ARTSUnitBase::ApplyTeamVisual()
+{
+	if (!bApplyTeamColorToMaterials)
+	{
+		return;
+	}
+
+	ApplyTeamVisualToMesh(MeshComponent);
+	ApplyTeamVisualToMesh(SkeletalMeshComponent);
+}
+
+void ARTSUnitBase::ApplyTeamVisualToMesh(UMeshComponent* TargetMesh)
+{
+	if (!TargetMesh || !TargetMesh->IsVisible())
+	{
+		return;
+	}
+
+	const int32 MaterialCount = TargetMesh->GetNumMaterials();
+	for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+	{
+		if (!TargetMesh->GetMaterial(MaterialIndex))
+		{
+			continue;
+		}
+
+		UMaterialInstanceDynamic* DynamicMaterial = Cast<UMaterialInstanceDynamic>(TargetMesh->GetMaterial(MaterialIndex));
+		if (!DynamicMaterial)
+		{
+			DynamicMaterial = TargetMesh->CreateDynamicMaterialInstance(MaterialIndex);
+		}
+
+		if (!DynamicMaterial)
+		{
+			continue;
+		}
+
+		DynamicMaterial->SetVectorParameterValue(TeamColorMaterialParameterName, TeamColor);
+		DynamicMaterial->SetScalarParameterValue(TeamNumberMaterialParameterName, static_cast<float>(TeamNumber));
+	}
+}
+
+void ARTSUnitBase::SetUnitData(URTSUnitData* NewUnitData)
+{
+	UnitData = NewUnitData;
+	RefreshUnitVisual();
+}
+
+void ARTSUnitBase::RefreshUnitVisual()
+{
+	const bool bUseSkeletalMesh = UnitData && UnitData->UnitSkeletalMesh;
+
+	if (SkeletalMeshComponent)
+	{
+		if (bUseSkeletalMesh)
+		{
+			SkeletalMeshComponent->SetSkeletalMesh(UnitData->UnitSkeletalMesh);
+			SkeletalMeshComponent->SetAnimInstanceClass(UnitData->AnimationClass);
+			SkeletalMeshComponent->SetHiddenInGame(false);
+			SkeletalMeshComponent->SetVisibility(true);
+			SkeletalMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			SkeletalMeshComponent->SetCanEverAffectNavigation(true);
+
+			for (int32 MaterialIndex = 0; MaterialIndex < UnitData->OverrideMaterials.Num(); ++MaterialIndex)
+			{
+				if (UnitData->OverrideMaterials[MaterialIndex])
+				{
+					SkeletalMeshComponent->SetMaterial(MaterialIndex, UnitData->OverrideMaterials[MaterialIndex]);
+				}
+			}
+		}
+		else
+		{
+			SkeletalMeshComponent->SetHiddenInGame(true);
+			SkeletalMeshComponent->SetVisibility(false);
+			SkeletalMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			SkeletalMeshComponent->SetCanEverAffectNavigation(false);
+		}
+	}
+
+	if (MeshComponent)
+	{
+		MeshComponent->SetHiddenInGame(bUseSkeletalMesh);
+		MeshComponent->SetVisibility(!bUseSkeletalMesh);
+		MeshComponent->SetCollisionEnabled(bUseSkeletalMesh ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+		MeshComponent->SetCanEverAffectNavigation(!bUseSkeletalMesh);
+
+		if (!bUseSkeletalMesh && UnitData)
+		{
+			for (int32 MaterialIndex = 0; MaterialIndex < UnitData->OverrideMaterials.Num(); ++MaterialIndex)
+			{
+				if (UnitData->OverrideMaterials[MaterialIndex])
+				{
+					MeshComponent->SetMaterial(MaterialIndex, UnitData->OverrideMaterials[MaterialIndex]);
+				}
+			}
+		}
+	}
+
+	ApplyTeamVisual();
+}
 void ARTSUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);

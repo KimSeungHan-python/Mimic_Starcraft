@@ -13,7 +13,9 @@ enum class ERTSCommandType : uint8
 {
     None,
     TrainUnit,
-    BuildStructure
+    BuildStructure,
+    OpenCommandPage,
+    Back
 };
 
 USTRUCT(BlueprintType)
@@ -35,6 +37,15 @@ struct MIMIC_STARCRAFT_API FRTSCommandButton
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     FKey Hotkey;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    FName CommandPage = NAME_None;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    FName TargetCommandPage = NAME_None;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    int32 SortOrder = 0;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     TObjectPtr<URTSUnitData> UnitData = nullptr;

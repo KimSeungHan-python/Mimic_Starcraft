@@ -5,11 +5,13 @@
 #include "Data/RTSUnitData.h"
 #include "Grid/RTSGridManager.h"
 
+#include "Components/MeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/Controller.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
 
@@ -331,15 +333,32 @@ void ARTSBuilding::RefreshBuildingVisual()
         return;
     }
 
-    if (BuildingData && BuildingData->PreviewStaticMesh && !MeshComponent->GetStaticMesh())
+    if (BuildingData)
     {
-        MeshComponent->SetStaticMesh(BuildingData->PreviewStaticMesh);
+        UStaticMesh* DesiredMesh = BuildingData->BuildingStaticMesh
+            ? BuildingData->BuildingStaticMesh
+            : BuildingData->PreviewStaticMesh;
+
+        if (DesiredMesh)
+        {
+            MeshComponent->SetStaticMesh(DesiredMesh);
+        }
+
+        for (int32 MaterialIndex = 0; MaterialIndex < BuildingData->OverrideMaterials.Num(); ++MaterialIndex)
+        {
+            if (BuildingData->OverrideMaterials[MaterialIndex])
+            {
+                MeshComponent->SetMaterial(MaterialIndex, BuildingData->OverrideMaterials[MaterialIndex]);
+            }
+        }
     }
 
     if (MeshComponent->GetStaticMesh())
     {
         FitMeshToGridFootprint(CachedCellSize);
     }
+
+    ApplyTeamVisual();
 }
 
 void ARTSBuilding::RegisterToLocalGridIfNeeded()
@@ -647,9 +666,44 @@ void ARTSBuilding::OnRep_TeamInfo()
 
 void ARTSBuilding::ApplyTeamVisual()
 {
-    // 건물 머티리얼 색상 변경 처리
+    if (!bApplyTeamColorToMaterials)
+    {
+        return;
+    }
+
+    ApplyTeamVisualToMesh(MeshComponent);
 }
 
+void ARTSBuilding::ApplyTeamVisualToMesh(UMeshComponent* TargetMesh)
+{
+    if (!TargetMesh || !TargetMesh->IsVisible())
+    {
+        return;
+    }
+
+    const int32 MaterialCount = TargetMesh->GetNumMaterials();
+    for (int32 MaterialIndex = 0; MaterialIndex < MaterialCount; ++MaterialIndex)
+    {
+        if (!TargetMesh->GetMaterial(MaterialIndex))
+        {
+            continue;
+        }
+
+        UMaterialInstanceDynamic* DynamicMaterial = Cast<UMaterialInstanceDynamic>(TargetMesh->GetMaterial(MaterialIndex));
+        if (!DynamicMaterial)
+        {
+            DynamicMaterial = TargetMesh->CreateDynamicMaterialInstance(MaterialIndex);
+        }
+
+        if (!DynamicMaterial)
+        {
+            continue;
+        }
+
+        DynamicMaterial->SetVectorParameterValue(TeamColorMaterialParameterName, TeamColor);
+        DynamicMaterial->SetScalarParameterValue(TeamNumberMaterialParameterName, static_cast<float>(TeamNumber));
+    }
+}
 
 bool ARTSBuilding::CanReceiveCommandsFrom(AController* Controller) const
 {

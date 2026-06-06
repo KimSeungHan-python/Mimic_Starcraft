@@ -59,23 +59,38 @@ FTransform ARTSStartCamp::GetWorkerWorldTransform(int32 Index) const
 
 FTransform ARTSStartCamp::GetCameraWorldTransform() const
 {
-	const FVector CameraLocation = GetActorLocation() + CameraOffset;
+    FVector FocusLocation = GetMainBaseWorldTransform().GetLocation();
+    FocusLocation.X += CameraOffset.X;
+    FocusLocation.Y += CameraOffset.Y;
 
-	FRotator CameraRotation = FRotator(-55.f, 0.f, 0.f);
+    if (GridManager)
+    {
+        const FRTSGridCoord FocusCoord = GridManager->WorldToGrid(FocusLocation);
+        FVector GroundLocation;
+        if (GridManager->GetCellWorldCenterOnGround(FocusCoord, GroundLocation))
+        {
+            FocusLocation.Z = GroundLocation.Z;
+        }
+    }
 
-	if (MineralCenterActor)
-	{
-		FVector ToCenter = GetActorLocation() - CameraLocation;
-		ToCenter.Z = 0.f;
+    FVector LookTarget = GetMainBaseWorldTransform().GetLocation();
+    if (MineralCenterActor)
+    {
+        LookTarget = MineralCenterActor->GetActorLocation();
+    }
 
-		if (!ToCenter.IsNearlyZero())
-		{
-			CameraRotation = FRotationMatrix::MakeFromX(ToCenter).Rotator();
-			CameraRotation.Pitch = -55.f;
-		}
-	}
+    FVector ToTarget = LookTarget - FocusLocation;
+    ToTarget.Z = 0.f;
 
-	return FTransform(CameraRotation, CameraLocation);
+    FRotator CameraPawnRotation = GetActorRotation();
+    if (!ToTarget.IsNearlyZero())
+    {
+        CameraPawnRotation = FRotationMatrix::MakeFromX(ToTarget).Rotator();
+        CameraPawnRotation.Pitch = 0.f;
+        CameraPawnRotation.Roll = 0.f;
+    }
+
+    return FTransform(CameraPawnRotation, FocusLocation);
 }
 
 FTransform ARTSStartCamp::GetCreepCenterWorldTransform() const

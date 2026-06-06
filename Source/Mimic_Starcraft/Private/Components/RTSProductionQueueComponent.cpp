@@ -279,7 +279,7 @@ void URTSProductionQueueComponent::FinishCurrentProduction()
 
         if (NewUnit)
         {
-            NewUnit->UnitData = UnitData;
+            NewUnit->SetUnitData(UnitData);
             NewUnit->OwningPlayerState = OwningBuilding->OwningPlayerState;
             NewUnit->SetTeamInfo(OwningBuilding->TeamNumber, OwningBuilding->TeamColor);
             NewUnit->RegisterSupplyCost(UnitData->SupplyCost, true);

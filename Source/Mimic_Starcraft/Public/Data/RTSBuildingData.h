@@ -6,6 +6,8 @@
 #include "RTSBuildingData.generated.h"
 
 class ARTSBuilding;
+class UMaterialInterface;
+class UStaticMesh;
 class URTSUnitData;
 
 UENUM(BlueprintType)
@@ -44,8 +46,20 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
     FKey CommandHotkey;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
+    int32 CommandCardOrder = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
+    FName WorkerCommandPage = TEXT("Build");
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Visual")
+    UStaticMesh* BuildingStaticMesh = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Visual")
     UStaticMesh* PreviewStaticMesh = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Visual")
+    TArray<TObjectPtr<UMaterialInterface>> OverrideMaterials;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Production")
     TArray<TObjectPtr<URTSUnitData>> TrainableUnits;

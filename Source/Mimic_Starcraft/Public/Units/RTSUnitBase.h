@@ -12,7 +12,9 @@ class URTSUnitData;
 class ARTSPlayerController;
 class AController;
 class USceneComponent;
+class USkeletalMeshComponent;
 class UStaticMeshComponent;
+class UMeshComponent;
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSUnitBase : public AActor, public IRTSSelectableInterface
@@ -21,6 +23,7 @@ class MIMIC_STARCRAFT_API ARTSUnitBase : public AActor, public IRTSSelectableInt
 	
 public:
 	ARTSUnitBase();
+	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -29,6 +32,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<USkeletalMeshComponent> SkeletalMeshComponent;
 
 	// Start and ownership state
 
@@ -41,8 +47,17 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
 	TObjectPtr<ARTSPlayerState> OwningPlayerState;
 
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Unit")
+	UPROPERTY(ReplicatedUsing = OnRep_UnitData, BlueprintReadOnly, Category = "RTS Unit")
 	TObjectPtr<URTSUnitData> UnitData;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+	bool bApplyTeamColorToMaterials = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+	FName TeamColorMaterialParameterName = TEXT("TeamColor");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
+	FName TeamNumberMaterialParameterName = TEXT("TeamNumber");
 
 	UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
 	bool bIsSelected = false;
@@ -50,7 +65,17 @@ public:
 	UFUNCTION()
 	void OnRep_TeamInfo();
 
+	UFUNCTION()
+	void OnRep_UnitData();
+
 	void ApplyTeamVisual();
+
+	UFUNCTION(BlueprintCallable, Category = "RTS Unit")
+	void SetUnitData(URTSUnitData* NewUnitData);
+
+	UFUNCTION(BlueprintCallable, Category = "RTS Unit|Visual")
+	void RefreshUnitVisual();
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION()
@@ -93,4 +118,7 @@ public:
 	virtual bool IsSelected_Implementation() const override;
 	virtual int32 GetSelectableTeamNumber_Implementation() const override;
 	virtual bool IsOwnedByPlayerState_Implementation(ARTSPlayerState* PlayerState) const override;
+
+protected:
+	void ApplyTeamVisualToMesh(UMeshComponent* TargetMesh);
 };

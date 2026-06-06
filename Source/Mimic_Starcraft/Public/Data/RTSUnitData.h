@@ -7,6 +7,9 @@
 
 class ARTSUnitBase;
 class URTSBuildingData;
+class UAnimInstance;
+class UMaterialInterface;
+class USkeletalMesh;
 
 UCLASS(BlueprintType, Blueprintable)
 class MIMIC_STARCRAFT_API URTSUnitData : public UPrimaryDataAsset
@@ -23,8 +26,29 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
     TSubclassOf<ARTSUnitBase> UnitClass;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Visual")
+    TObjectPtr<USkeletalMesh> UnitSkeletalMesh = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Visual")
+    TSubclassOf<UAnimInstance> AnimationClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Visual")
+    TArray<TObjectPtr<UMaterialInterface>> OverrideMaterials;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
     FKey CommandHotkey;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
+    int32 CommandCardOrder = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
+    FKey BuildMenuHotkey;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
+    FText BuildMenuDisplayName;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
+    FName BuildCommandPage = TEXT("Build");
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Production")
     float BuildTime = 12.0f;

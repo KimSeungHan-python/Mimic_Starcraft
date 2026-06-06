@@ -12,6 +12,7 @@ ARTSVespeneGeyser::ARTSVespeneGeyser()
     ResourceType = ERTSResourceType::Vespene;
     MaxAmount = 2250;
     RemainingAmount = MaxAmount;
+    bBlocksBuildingPlacement = false;
 }
 
 void ARTSVespeneGeyser::BeginPlay()

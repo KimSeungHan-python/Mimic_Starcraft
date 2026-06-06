@@ -55,7 +55,10 @@ public:
     TArray<URTSUnitData*> UnitDataList;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command")
-    int32 MaxCommandCardSlots = 15;
+    int32 MaxCommandCardSlots = 24;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    FName ActiveCommandPage = NAME_None;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Control Group")
     float ControlGroupDoubleTapSeconds = 0.35f;
@@ -80,6 +83,15 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Selection")
     float DragSelectThresholdPixels = 8.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command|Feedback")
+    bool bShowCommandFeedback = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command|Feedback")
+    float CommandFeedbackDuration = 0.45f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command|Feedback")
+    float CommandFeedbackRadius = 85.0f;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
     TArray<TObjectPtr<AActor>> SelectedActors;
@@ -172,6 +184,12 @@ public:
     bool ExecuteCommandHotkey(FKey Hotkey);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    void SetActiveCommandPage(FName CommandPage);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    void ClearCommandPage();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
     void IssueSmartCommand();
 
     UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
@@ -251,6 +269,7 @@ private:
     void IssueMoveCommandOnServer(const TArray<ARTSUnitBase*>& Units, const FVector& TargetLocation);
     void IssueGatherCommandOnServer(const TArray<ARTSWorkerUnit*>& Workers, ARTSResourceNode* ResourceNode);
     void IssueRallyPointCommandOnServer(const TArray<ARTSBuilding*>& Buildings, const FVector& TargetLocation);
+    void ShowCommandFeedback(const FVector& WorldLocation, bool bTargetActorFeedback) const;
     ARTSBuilding* FindFirstOwnedSelectedBuilding() const;
     URTSBuildingData* FindBuildingDataById(FName BuildingId) const;
     URTSUnitData* FindUnitDataById(FName UnitId) const;

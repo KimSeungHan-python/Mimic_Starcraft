@@ -300,7 +300,7 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 			Worker->TeamNumber = PS->TeamNumber;
 			Worker->TeamColor = PS->TeamColor;
 			Worker->OwningPlayerState = PS;
-			Worker->UnitData = StartData->WorkerUnitData;
+			Worker->SetUnitData(StartData->WorkerUnitData);
 			Worker->RegisterSupplyCost(WorkerSupplyCost, false);
 
 			UGameplayStatics::FinishSpawningActor(Worker, WorkerTransform);

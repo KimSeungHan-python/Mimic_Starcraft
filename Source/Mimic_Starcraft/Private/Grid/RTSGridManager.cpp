@@ -1,6 +1,7 @@
 #include "Grid/RTSGridManager.h"
 #include "DrawDebugHelpers.h"
 #include "Data/RTSBuildingData.h"
+#include "Resources/RTSResourceNode.h"
 #include "Resources/RTSVespeneGeyser.h"
 #include "EngineUtils.h"
 
@@ -25,6 +26,22 @@ void ARTSGridManager::BeginPlay()
     {
         const FRTSGridCoord GeyserCoord = WorldToGrid(It->GetActorLocation());
         MarkVespeneGeyser(GeyserCoord, true);
+    }
+
+    for (TActorIterator<ARTSResourceNode> It(GetWorld()); It; ++It)
+    {
+        ARTSResourceNode* ResourceNode = *It;
+        if (!ResourceNode || !ResourceNode->bBlocksBuildingPlacement)
+        {
+            continue;
+        }
+
+        OccupyBuildingCells(
+            ResourceNode->GetGridOriginCoord(this),
+            FMath::Max(1, ResourceNode->GridWidth),
+            FMath::Max(1, ResourceNode->GridHeight),
+            ResourceNode->GetUniqueID()
+        );
     }
 
 
