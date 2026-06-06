@@ -130,6 +130,12 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
     bool QueueUnitProduction(URTSUnitData* UnitData);
 
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
+    void SetProductionRallyPoint(const FVector& WorldLocation);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
+    void ClearProductionRallyPoint();
+
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();
 

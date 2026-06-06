@@ -503,6 +503,25 @@ bool ARTSBuilding::QueueUnitProduction(URTSUnitData* UnitData)
 
     return ProductionQueueComponent->QueueUnit(UnitData, OwningPlayerState);
 }
+void ARTSBuilding::SetProductionRallyPoint(const FVector& WorldLocation)
+{
+    if (!HasAuthority() || !ProductionQueueComponent)
+    {
+        return;
+    }
+
+    ProductionQueueComponent->SetRallyPoint(WorldLocation);
+}
+
+void ARTSBuilding::ClearProductionRallyPoint()
+{
+    if (!HasAuthority() || !ProductionQueueComponent)
+    {
+        return;
+    }
+
+    ProductionQueueComponent->ClearRallyPoint();
+}
 
 float ARTSBuilding::GetBuildProgress01() const
 {

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Types/RTSCommandTypes.h"
 #include "Types/RTSGridTypes.h"
 #include "RTSPlayerController.generated.h"
 
@@ -17,6 +18,8 @@ class AActor;
 class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRTSSelectionChanged);
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSPlayerController : public APlayerController
@@ -51,6 +54,15 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTS Production")
     TArray<URTSUnitData*> UnitDataList;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command")
+    int32 MaxCommandCardSlots = 15;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Control Group")
+    float ControlGroupDoubleTapSeconds = 0.35f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Building")
+    float WorkerBuildStartAcceptanceRadius = 220.0f;
+
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
     bool bIsInBuildMode = false;
 
@@ -71,6 +83,9 @@ public:
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
     TArray<TObjectPtr<AActor>> SelectedActors;
+
+    UPROPERTY(BlueprintAssignable, Category = "RTS Selection")
+    FRTSSelectionChanged OnSelectionChanged;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input|Enhanced")
     TObjectPtr<UInputMappingContext> PlayerMappingContext;
@@ -100,6 +115,9 @@ public:
 
 private:
     UPROPERTY()
+    TMap<int32, FRTSControlGroup> ControlGroups;
+
+    UPROPERTY()
     ARTSBuilding* PreviewBuildingActor = nullptr;
 
     UPROPERTY()
@@ -124,6 +142,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void ConfirmBuild();
 
+    UFUNCTION(BlueprintCallable, Category = "RTS Building")
+    bool CompleteWorkerBuildOrder(ARTSWorkerUnit* Worker, FName BuildingId, FRTSGridCoord OriginCoord);
+
     UFUNCTION(Client, Reliable)
     void Client_SetStartCamera(const FTransform& CameraTransform);
 
@@ -139,7 +160,34 @@ public:
     bool QueueProductionForSelectedBuilding(URTSUnitData* UnitData);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    void GetAvailableCommandButtons(TArray<FRTSCommandButton>& OutCommands) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    bool ExecuteCommandButton(const FRTSCommandButton& Command);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    bool ExecuteCommandSlot(int32 SlotIndex);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
+    bool ExecuteCommandHotkey(FKey Hotkey);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Command")
     void IssueSmartCommand();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
+    void HandleControlGroupInput(int32 GroupIndex);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
+    void AssignControlGroup(int32 GroupIndex);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
+    void AddSelectionToControlGroup(int32 GroupIndex);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
+    bool RecallControlGroup(int32 GroupIndex, bool bAppendSelection = false);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Control Group")
+    void ClearControlGroup(int32 GroupIndex);
 
     const TArray<TObjectPtr<AActor>>& GetSelectedActors() const { return SelectedActors; }
     bool IsSelectionDragging() const { return bIsDraggingSelection; }
@@ -151,6 +199,9 @@ protected:
     void ServerConfirmBuild(FName BuildingId, FRTSGridCoord OriginCoord);
 
     UFUNCTION(Server, Reliable)
+    void ServerStartWorkerBuild(ARTSWorkerUnit* Worker, FName BuildingId, FRTSGridCoord OriginCoord);
+
+    UFUNCTION(Server, Reliable)
     void ServerQueueProduction(ARTSBuilding* Building, FName UnitId);
 
     UFUNCTION(Server, Reliable)
@@ -159,11 +210,15 @@ protected:
     UFUNCTION(Server, Reliable)
     void ServerIssueGatherCommand(const TArray<ARTSWorkerUnit*>& Workers, ARTSResourceNode* ResourceNode);
 
+    UFUNCTION(Server, Reliable)
+    void ServerSetRallyPoint(const TArray<ARTSBuilding*>& Buildings, FVector TargetLocation);
+
 private:
     bool GetMouseWorldLocation(FVector& OutLocation) const;
     void BeginSelection();
     void UpdateSelectionDrag();
     void EndSelection();
+    void BroadcastSelectionChanged();
     void SelectSingleActorUnderCursor(bool bAppendSelection);
     void SelectActorsInScreenRect(const FVector2D& StartScreen, const FVector2D& EndScreen, bool bAppendSelection);
     bool IsActorSelectable(AActor* Actor) const;
@@ -172,6 +227,15 @@ private:
     void SelectVisibleActorsOfSameClass(AActor* SourceActor, bool bAppendSelection);
     TArray<ARTSUnitBase*> GetOwnedSelectedUnits() const;
     TArray<ARTSWorkerUnit*> GetOwnedSelectedWorkers() const;
+    TArray<ARTSBuilding*> GetOwnedSelectedBuildings() const;
+    ARTSWorkerUnit* FindBestBuilderForLocation(const FVector& TargetLocation) const;
+    void AppendProductionCommands(TArray<FRTSCommandButton>& OutCommands, int32& SlotIndex) const;
+    void AppendWorkerBuildCommands(TArray<FRTSCommandButton>& OutCommands, int32& SlotIndex) const;
+    bool CanBuildingTrainUnit(const ARTSBuilding* Building, const URTSUnitData* UnitData) const;
+    bool IsValidControlGroupIndex(int32 GroupIndex) const;
+    void PruneControlGroup(FRTSControlGroup& Group) const;
+    bool GetActorGroupCenter(const TArray<TObjectPtr<AActor>>& Actors, FVector& OutCenter) const;
+    void MoveCameraToActorGroup(const TArray<TObjectPtr<AActor>>& Actors);
     void UpdateBuildingPreview();
     void CreatePreviewActor();
     void DestroyPreviewActor();
@@ -179,10 +243,14 @@ private:
     void CreateBuildGridPreviewActor();
     void DestroyBuildGridPreviewActor();
 
+    bool StartWorkerBuildOrderOnServer(ARTSWorkerUnit* Worker, FName BuildingId, FRTSGridCoord OriginCoord);
+    bool IsWorkerCloseEnoughToBuild(ARTSWorkerUnit* Worker, URTSBuildingData* BuildingData, FRTSGridCoord OriginCoord);
+    URTSBuildingData* FindBuildableBuildingDataForWorker(ARTSWorkerUnit* Worker, FName BuildingId) const;
     void BuildOnServer(FName BuildingId, FRTSGridCoord OriginCoord);
     bool QueueProductionOnServer(ARTSBuilding* Building, FName UnitId);
     void IssueMoveCommandOnServer(const TArray<ARTSUnitBase*>& Units, const FVector& TargetLocation);
     void IssueGatherCommandOnServer(const TArray<ARTSWorkerUnit*>& Workers, ARTSResourceNode* ResourceNode);
+    void IssueRallyPointCommandOnServer(const TArray<ARTSBuilding*>& Buildings, const FVector& TargetLocation);
     ARTSBuilding* FindFirstOwnedSelectedBuilding() const;
     URTSBuildingData* FindBuildingDataById(FName BuildingId) const;
     URTSUnitData* FindUnitDataById(FName UnitId) const;

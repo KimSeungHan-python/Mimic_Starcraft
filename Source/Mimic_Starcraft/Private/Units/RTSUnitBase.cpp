@@ -79,6 +79,7 @@ void ARTSUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
     DOREPLIFETIME(ARTSUnitBase, TeamNumber);
     DOREPLIFETIME(ARTSUnitBase, TeamColor);
     DOREPLIFETIME(ARTSUnitBase, OwningPlayerState);
+    DOREPLIFETIME(ARTSUnitBase, UnitData);
     DOREPLIFETIME(ARTSUnitBase, bHasMoveTarget);
     DOREPLIFETIME(ARTSUnitBase, MoveTargetLocation);
     DOREPLIFETIME(ARTSUnitBase, SupplyCost);

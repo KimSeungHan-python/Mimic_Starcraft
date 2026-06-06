@@ -47,6 +47,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Production|Spawn")
     FVector SpawnPointLocalOffset = FVector(300.0f, 0.0f, 0.0f);
 
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Production|Rally")
+    bool bUseRallyPoint = false;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Production|Rally")
+    FVector RallyPointWorldLocation = FVector::ZeroVector;
+
     UPROPERTY(ReplicatedUsing = OnRep_ProductionQueue, BlueprintReadOnly, Category = "RTS Production")
     TArray<FRTSProductionQueueItem> ProductionQueue;
 
@@ -70,6 +76,15 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "RTS Production")
     FTransform GetSpawnTransform() const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
+    void SetRallyPoint(const FVector& WorldLocation);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
+    void ClearRallyPoint();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
+    bool HasRallyPoint() const;
 
 protected:
     UFUNCTION()

@@ -41,6 +41,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
 	TObjectPtr<ARTSPlayerState> OwningPlayerState;
 
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Unit")
+	TObjectPtr<URTSUnitData> UnitData;
+
 	UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
 	bool bIsSelected = false;
 

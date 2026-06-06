@@ -6,6 +6,7 @@
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSRaceStartData.h"
 #include "Data/RTSBuildingData.h"
+#include "Data/RTSUnitData.h"
 #include "Core/RTSPlayerController.h"
 #include "Core/RTSHUD.h"
 #include "Grid/RTSGridManager.h"
@@ -265,11 +266,21 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 		}
 	}
 
-	const int32 WorkerCount = FMath::Min(StartData->InitialWorkerCount, Camp->WorkerLocalTransforms.Num());
+	TSubclassOf<ARTSUnitBase> WorkerClass = StartData->WorkerClass;
+    if (!WorkerClass && StartData->WorkerUnitData)
+    {
+        WorkerClass = StartData->WorkerUnitData->UnitClass;
+    }
+
+    const int32 WorkerSupplyCost = StartData->WorkerUnitData
+        ? StartData->WorkerUnitData->SupplyCost
+        : StartData->InitialWorkerSupplyCost;
+
+    const int32 WorkerCount = FMath::Min(StartData->InitialWorkerCount, Camp->WorkerLocalTransforms.Num());
 
 	for (int32 i = 0; i < WorkerCount; ++i)
 	{
-		if (!StartData->WorkerClass)
+		if (!WorkerClass)
 		{
 			continue;
 		}
@@ -277,7 +288,7 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 		const FTransform WorkerTransform = Camp->GetWorkerWorldTransform(i);
 
 		ARTSUnitBase* Worker = World->SpawnActorDeferred<ARTSUnitBase>(
-			StartData->WorkerClass,
+			WorkerClass,
 			WorkerTransform,
 			nullptr,
 			nullptr,
@@ -289,7 +300,8 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 			Worker->TeamNumber = PS->TeamNumber;
 			Worker->TeamColor = PS->TeamColor;
 			Worker->OwningPlayerState = PS;
-			Worker->RegisterSupplyCost(StartData->InitialWorkerSupplyCost, false);
+			Worker->UnitData = StartData->WorkerUnitData;
+			Worker->RegisterSupplyCost(WorkerSupplyCost, false);
 
 			UGameplayStatics::FinishSpawningActor(Worker, WorkerTransform);
 		}

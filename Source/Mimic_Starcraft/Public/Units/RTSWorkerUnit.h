@@ -6,6 +6,7 @@
 
 class ARTSResourceNode;
 class URTSGatherComponent;
+class URTSWorkerBuildComponent;
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSWorkerUnit : public ARTSUnitBase
@@ -17,6 +18,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<URTSGatherComponent> GatherComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<URTSWorkerBuildComponent> BuildComponent;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Worker")
     bool GatherFromResource(ARTSResourceNode* ResourceNode);

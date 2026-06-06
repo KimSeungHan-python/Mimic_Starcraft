@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "InputCoreTypes.h"
 #include "RTSUnitData.generated.h"
 
 class ARTSUnitBase;
+class URTSBuildingData;
 
 UCLASS(BlueprintType, Blueprintable)
 class MIMIC_STARCRAFT_API URTSUnitData : public UPrimaryDataAsset
@@ -21,6 +23,9 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit")
     TSubclassOf<ARTSUnitBase> UnitClass;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
+    FKey CommandHotkey;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Production")
     float BuildTime = 12.0f;
 
@@ -35,4 +40,7 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Role")
     bool bWorker = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
+    TArray<TObjectPtr<URTSBuildingData>> BuildableBuildings;
 };

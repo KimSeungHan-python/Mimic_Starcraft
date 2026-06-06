@@ -10,6 +10,7 @@
 class ARTSUnitBase;
 class ARTSBuilding;
 class URTSBuildingData;
+class URTSUnitData;
 class AActor;
 
 UCLASS(BlueprintType)
@@ -29,6 +30,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	TSubclassOf<ARTSUnitBase> WorkerClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Workers")
+	TObjectPtr<URTSUnitData> WorkerUnitData;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	int32 InitialWorkerCount = 12;

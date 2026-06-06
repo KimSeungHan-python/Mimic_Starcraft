@@ -9,8 +9,10 @@
 #include "Units/RTSUnitBase.h"
 #include "Units/RTSWorkerUnit.h"
 #include "Engine/World.h"
+#include "GameFramework/Pawn.h"
 #include "EngineUtils.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/RTSWorkerBuildComponent.h"
 #include "Buildings/RTSBuildGridPreview.h"
 #include "InputCoreTypes.h"
 #include "EnhancedInputComponent.h"
@@ -341,6 +343,22 @@ void ARTSPlayerController::ConfirmBuild()
 
     const FName BuildingId = SelectedBuildingData->BuildingId;
     const FRTSGridCoord OriginCoord = CurrentPreviewCoord;
+    ARTSWorkerUnit* Builder = FindBestBuilderForLocation(LastPreviewTransform.GetLocation());
+
+    if (Builder)
+    {
+        if (HasAuthority())
+        {
+            StartWorkerBuildOrderOnServer(Builder, BuildingId, OriginCoord);
+        }
+        else
+        {
+            ServerStartWorkerBuild(Builder, BuildingId, OriginCoord);
+        }
+
+        CancelBuildMode();
+        return;
+    }
 
     if (HasAuthority())
     {
@@ -359,6 +377,14 @@ void ARTSPlayerController::ServerConfirmBuild_Implementation(FName BuildingId, F
     BuildOnServer(BuildingId, OriginCoord);
 }
 
+void ARTSPlayerController::ServerStartWorkerBuild_Implementation(
+    ARTSWorkerUnit* Worker,
+    FName BuildingId,
+    FRTSGridCoord OriginCoord
+)
+{
+    StartWorkerBuildOrderOnServer(Worker, BuildingId, OriginCoord);
+}
 void ARTSPlayerController::BeginSelection()
 {
     if (bIsInBuildMode)
@@ -410,6 +436,11 @@ void ARTSPlayerController::EndSelection()
     SelectActorsInScreenRect(SelectionDragStart, SelectionDragEnd, bAppendSelection);
 }
 
+void ARTSPlayerController::BroadcastSelectionChanged()
+{
+    OnSelectionChanged.Broadcast();
+}
+
 void ARTSPlayerController::ClearSelection()
 {
     for (AActor* SelectedActor : SelectedActors)
@@ -421,6 +452,7 @@ void ARTSPlayerController::ClearSelection()
     }
 
     SelectedActors.Reset();
+    BroadcastSelectionChanged();
 }
 
 void ARTSPlayerController::SelectActor(AActor* Actor, bool bAppendSelection)
@@ -441,6 +473,7 @@ void ARTSPlayerController::SelectActor(AActor* Actor, bool bAppendSelection)
 
     SelectedActors.AddUnique(Actor);
     IRTSSelectableInterface::Execute_SetSelectionState(Actor, true);
+    BroadcastSelectionChanged();
 }
 
 void ARTSPlayerController::SelectSingleActorUnderCursor(bool bAppendSelection)
@@ -608,6 +641,8 @@ void ARTSPlayerController::SelectVisibleActorsOfSameClass(AActor* SourceActor, b
         SelectedActors.AddUnique(Candidate);
         IRTSSelectableInterface::Execute_SetSelectionState(Candidate, true);
     }
+
+    BroadcastSelectionChanged();
 }
 TArray<ARTSUnitBase*> ARTSPlayerController::GetOwnedSelectedUnits() const
 {
@@ -650,6 +685,385 @@ TArray<ARTSWorkerUnit*> ARTSPlayerController::GetOwnedSelectedWorkers() const
     return Workers;
 }
 
+ARTSWorkerUnit* ARTSPlayerController::FindBestBuilderForLocation(const FVector& TargetLocation) const
+{
+    ARTSWorkerUnit* BestWorker = nullptr;
+    float BestDistSq = TNumericLimits<float>::Max();
+
+    for (ARTSWorkerUnit* Worker : GetOwnedSelectedWorkers())
+    {
+        if (!Worker)
+        {
+            continue;
+        }
+
+        const float DistSq = FVector::DistSquared(Worker->GetActorLocation(), TargetLocation);
+        if (DistSq < BestDistSq)
+        {
+            BestDistSq = DistSq;
+            BestWorker = Worker;
+        }
+    }
+
+    return BestWorker;
+}
+TArray<ARTSBuilding*> ARTSPlayerController::GetOwnedSelectedBuildings() const
+{
+    TArray<ARTSBuilding*> Buildings;
+    ARTSPlayerState* LocalPlayerState = GetPlayerState<ARTSPlayerState>();
+    if (!LocalPlayerState)
+    {
+        return Buildings;
+    }
+
+    for (AActor* SelectedActor : SelectedActors)
+    {
+        ARTSBuilding* Building = Cast<ARTSBuilding>(SelectedActor);
+        if (!Building)
+        {
+            continue;
+        }
+
+        if (IRTSSelectableInterface::Execute_IsOwnedByPlayerState(Building, LocalPlayerState))
+        {
+            Buildings.Add(Building);
+        }
+    }
+
+    return Buildings;
+}
+
+void ARTSPlayerController::GetAvailableCommandButtons(TArray<FRTSCommandButton>& OutCommands) const
+{
+    OutCommands.Reset();
+
+    int32 SlotIndex = 0;
+    AppendProductionCommands(OutCommands, SlotIndex);
+    AppendWorkerBuildCommands(OutCommands, SlotIndex);
+}
+
+void ARTSPlayerController::AppendProductionCommands(TArray<FRTSCommandButton>& OutCommands, int32& SlotIndex) const
+{
+    TSet<URTSUnitData*> AddedUnits;
+
+    for (ARTSBuilding* Building : GetOwnedSelectedBuildings())
+    {
+        if (!Building || !Building->BuildingData || Building->BuildingState != ERTSBuildingState::Completed)
+        {
+            continue;
+        }
+
+        for (TObjectPtr<URTSUnitData> TrainableUnitPtr : Building->BuildingData->TrainableUnits)
+        {
+            URTSUnitData* UnitData = TrainableUnitPtr.Get();
+            if (!UnitData || AddedUnits.Contains(UnitData))
+            {
+                continue;
+            }
+
+            if (MaxCommandCardSlots > 0 && OutCommands.Num() >= MaxCommandCardSlots)
+            {
+                return;
+            }
+
+            FRTSCommandButton Command;
+            Command.SlotIndex = SlotIndex++;
+            Command.CommandId = UnitData->UnitId;
+            Command.DisplayName = UnitData->DisplayName.IsEmpty()
+                ? FText::FromName(UnitData->UnitId)
+                : UnitData->DisplayName;
+            Command.CommandType = ERTSCommandType::TrainUnit;
+            Command.Hotkey = UnitData->CommandHotkey;
+            Command.UnitData = UnitData;
+
+            OutCommands.Add(Command);
+            AddedUnits.Add(UnitData);
+        }
+    }
+}
+
+void ARTSPlayerController::AppendWorkerBuildCommands(TArray<FRTSCommandButton>& OutCommands, int32& SlotIndex) const
+{
+    TSet<URTSBuildingData*> AddedBuildings;
+
+    for (ARTSWorkerUnit* Worker : GetOwnedSelectedWorkers())
+    {
+        if (!Worker || !Worker->UnitData || !Worker->UnitData->bWorker)
+        {
+            continue;
+        }
+
+        for (TObjectPtr<URTSBuildingData> BuildableBuildingPtr : Worker->UnitData->BuildableBuildings)
+        {
+            URTSBuildingData* BuildingData = BuildableBuildingPtr.Get();
+            if (!BuildingData || AddedBuildings.Contains(BuildingData))
+            {
+                continue;
+            }
+
+            if (MaxCommandCardSlots > 0 && OutCommands.Num() >= MaxCommandCardSlots)
+            {
+                return;
+            }
+
+            FRTSCommandButton Command;
+            Command.SlotIndex = SlotIndex++;
+            Command.CommandId = BuildingData->BuildingId;
+            Command.DisplayName = BuildingData->DisplayName.IsEmpty()
+                ? FText::FromName(BuildingData->BuildingId)
+                : BuildingData->DisplayName;
+            Command.CommandType = ERTSCommandType::BuildStructure;
+            Command.Hotkey = BuildingData->CommandHotkey;
+            Command.BuildingData = BuildingData;
+
+            OutCommands.Add(Command);
+            AddedBuildings.Add(BuildingData);
+        }
+    }
+}
+
+bool ARTSPlayerController::ExecuteCommandButton(const FRTSCommandButton& Command)
+{
+    switch (Command.CommandType)
+    {
+    case ERTSCommandType::TrainUnit:
+        return QueueProductionForSelectedBuilding(Command.UnitData.Get());
+
+    case ERTSCommandType::BuildStructure:
+        if (!Command.BuildingData || GetOwnedSelectedWorkers().Num() == 0)
+        {
+            return false;
+        }
+
+        StartBuildMode(Command.BuildingData.Get());
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+bool ARTSPlayerController::ExecuteCommandSlot(int32 SlotIndex)
+{
+    TArray<FRTSCommandButton> Commands;
+    GetAvailableCommandButtons(Commands);
+
+    for (const FRTSCommandButton& Command : Commands)
+    {
+        if (Command.SlotIndex == SlotIndex)
+        {
+            return ExecuteCommandButton(Command);
+        }
+    }
+
+    return false;
+}
+
+bool ARTSPlayerController::ExecuteCommandHotkey(FKey Hotkey)
+{
+    if (!Hotkey.IsValid())
+    {
+        return false;
+    }
+
+    TArray<FRTSCommandButton> Commands;
+    GetAvailableCommandButtons(Commands);
+
+    for (const FRTSCommandButton& Command : Commands)
+    {
+        if (Command.Hotkey == Hotkey)
+        {
+            return ExecuteCommandButton(Command);
+        }
+    }
+
+    return false;
+}
+
+bool ARTSPlayerController::CanBuildingTrainUnit(const ARTSBuilding* Building, const URTSUnitData* UnitData) const
+{
+    if (!Building || !Building->BuildingData || !UnitData)
+    {
+        return false;
+    }
+
+    for (TObjectPtr<URTSUnitData> TrainableUnitPtr : Building->BuildingData->TrainableUnits)
+    {
+        if (TrainableUnitPtr.Get() == UnitData)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void ARTSPlayerController::HandleControlGroupInput(int32 GroupIndex)
+{
+    const bool bCtrlDown = IsInputKeyDown(EKeys::LeftControl) || IsInputKeyDown(EKeys::RightControl);
+    const bool bShiftDown = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+
+    if (bCtrlDown && bShiftDown)
+    {
+        AddSelectionToControlGroup(GroupIndex);
+        return;
+    }
+
+    if (bCtrlDown)
+    {
+        AssignControlGroup(GroupIndex);
+        return;
+    }
+
+    RecallControlGroup(GroupIndex, bShiftDown);
+}
+
+void ARTSPlayerController::AssignControlGroup(int32 GroupIndex)
+{
+    if (!IsValidControlGroupIndex(GroupIndex))
+    {
+        return;
+    }
+
+    FRTSControlGroup& Group = ControlGroups.FindOrAdd(GroupIndex);
+    Group.Actors.Reset();
+    Group.LastRecallTimeSeconds = -1.0;
+
+    for (AActor* SelectedActor : SelectedActors)
+    {
+        if (IsActorSelectable(SelectedActor) && IsOwnedByLocalPlayer(SelectedActor))
+        {
+            Group.Actors.AddUnique(SelectedActor);
+        }
+    }
+}
+
+void ARTSPlayerController::AddSelectionToControlGroup(int32 GroupIndex)
+{
+    if (!IsValidControlGroupIndex(GroupIndex))
+    {
+        return;
+    }
+
+    FRTSControlGroup& Group = ControlGroups.FindOrAdd(GroupIndex);
+    Group.LastRecallTimeSeconds = -1.0;
+
+    for (AActor* SelectedActor : SelectedActors)
+    {
+        if (IsActorSelectable(SelectedActor) && IsOwnedByLocalPlayer(SelectedActor))
+        {
+            Group.Actors.AddUnique(SelectedActor);
+        }
+    }
+}
+
+bool ARTSPlayerController::RecallControlGroup(int32 GroupIndex, bool bAppendSelection)
+{
+    FRTSControlGroup* Group = ControlGroups.Find(GroupIndex);
+    if (!Group)
+    {
+        return false;
+    }
+
+    PruneControlGroup(*Group);
+    if (Group->Actors.Num() == 0)
+    {
+        return false;
+    }
+
+    UWorld* World = GetWorld();
+    const double CurrentTimeSeconds = World ? World->GetTimeSeconds() : 0.0;
+    const bool bDoubleTap = Group->LastRecallTimeSeconds >= 0.0
+        && CurrentTimeSeconds - Group->LastRecallTimeSeconds <= ControlGroupDoubleTapSeconds;
+
+    Group->LastRecallTimeSeconds = CurrentTimeSeconds;
+
+    if (!bAppendSelection)
+    {
+        ClearSelection();
+    }
+
+    for (AActor* ActorInGroup : Group->Actors)
+    {
+        SelectActor(ActorInGroup, true);
+    }
+
+    if (bDoubleTap)
+    {
+        MoveCameraToActorGroup(Group->Actors);
+    }
+
+    return true;
+}
+
+void ARTSPlayerController::ClearControlGroup(int32 GroupIndex)
+{
+    ControlGroups.Remove(GroupIndex);
+}
+
+bool ARTSPlayerController::IsValidControlGroupIndex(int32 GroupIndex) const
+{
+    return GroupIndex >= 0 && GroupIndex <= 9;
+}
+
+void ARTSPlayerController::PruneControlGroup(FRTSControlGroup& Group) const
+{
+    for (int32 Index = Group.Actors.Num() - 1; Index >= 0; --Index)
+    {
+        AActor* Actor = Group.Actors[Index].Get();
+        if (!IsActorSelectable(Actor) || !IsOwnedByLocalPlayer(Actor))
+        {
+            Group.Actors.RemoveAt(Index);
+        }
+    }
+}
+
+bool ARTSPlayerController::GetActorGroupCenter(const TArray<TObjectPtr<AActor>>& Actors, FVector& OutCenter) const
+{
+    FVector AccumulatedLocation = FVector::ZeroVector;
+    int32 ValidActorCount = 0;
+
+    for (const TObjectPtr<AActor>& ActorPtr : Actors)
+    {
+        AActor* Actor = ActorPtr.Get();
+        if (!Actor)
+        {
+            continue;
+        }
+
+        AccumulatedLocation += Actor->GetActorLocation();
+        ++ValidActorCount;
+    }
+
+    if (ValidActorCount == 0)
+    {
+        return false;
+    }
+
+    OutCenter = AccumulatedLocation / static_cast<float>(ValidActorCount);
+    return true;
+}
+
+void ARTSPlayerController::MoveCameraToActorGroup(const TArray<TObjectPtr<AActor>>& Actors)
+{
+    FVector GroupCenter;
+    if (!GetActorGroupCenter(Actors, GroupCenter))
+    {
+        return;
+    }
+
+    APawn* ControlledPawn = GetPawn();
+    if (!ControlledPawn)
+    {
+        return;
+    }
+
+    FVector CameraPawnLocation = ControlledPawn->GetActorLocation();
+    CameraPawnLocation.X = GroupCenter.X;
+    CameraPawnLocation.Y = GroupCenter.Y;
+    ControlledPawn->SetActorLocation(CameraPawnLocation, false);
+}
+
 void ARTSPlayerController::IssueSmartCommand()
 {
     if (bIsInBuildMode)
@@ -689,18 +1103,32 @@ void ARTSPlayerController::IssueSmartCommand()
     }
 
     const TArray<ARTSUnitBase*> Units = GetOwnedSelectedUnits();
-    if (Units.Num() == 0)
+    if (Units.Num() > 0)
+    {
+        if (HasAuthority())
+        {
+            IssueMoveCommandOnServer(Units, HitResult.Location);
+        }
+        else
+        {
+            ServerIssueMoveCommand(Units, HitResult.Location);
+        }
+        return;
+    }
+
+    const TArray<ARTSBuilding*> Buildings = GetOwnedSelectedBuildings();
+    if (Buildings.Num() == 0)
     {
         return;
     }
 
     if (HasAuthority())
     {
-        IssueMoveCommandOnServer(Units, HitResult.Location);
+        IssueRallyPointCommandOnServer(Buildings, HitResult.Location);
     }
     else
     {
-        ServerIssueMoveCommand(Units, HitResult.Location);
+        ServerSetRallyPoint(Buildings, HitResult.Location);
     }
 }
 
@@ -720,6 +1148,14 @@ void ARTSPlayerController::ServerIssueGatherCommand_Implementation(
     IssueGatherCommandOnServer(Workers, ResourceNode);
 }
 
+
+void ARTSPlayerController::ServerSetRallyPoint_Implementation(
+    const TArray<ARTSBuilding*>& Buildings,
+    FVector TargetLocation
+)
+{
+    IssueRallyPointCommandOnServer(Buildings, TargetLocation);
+}
 void ARTSPlayerController::IssueMoveCommandOnServer(
     const TArray<ARTSUnitBase*>& Units,
     const FVector& TargetLocation
@@ -770,6 +1206,27 @@ void ARTSPlayerController::IssueGatherCommandOnServer(
         Worker->GatherFromResource(ResourceNode);
     }
 }
+
+void ARTSPlayerController::IssueRallyPointCommandOnServer(
+    const TArray<ARTSBuilding*>& Buildings,
+    const FVector& TargetLocation
+)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    for (ARTSBuilding* Building : Buildings)
+    {
+        if (!Building || !Building->CanReceiveCommandsFrom(this))
+        {
+            continue;
+        }
+
+        Building->SetProductionRallyPoint(TargetLocation);
+    }
+}
 bool ARTSPlayerController::QueueProductionForSelectedBuilding(URTSUnitData* UnitData)
 {
     if (!UnitData)
@@ -777,19 +1234,27 @@ bool ARTSPlayerController::QueueProductionForSelectedBuilding(URTSUnitData* Unit
         return false;
     }
 
-    ARTSBuilding* Building = FindFirstOwnedSelectedBuilding();
-    if (!Building)
+    for (ARTSBuilding* Building : GetOwnedSelectedBuildings())
     {
-        return false;
+        if (!CanBuildingTrainUnit(Building, UnitData))
+        {
+            continue;
+        }
+
+        if (HasAuthority())
+        {
+            if (QueueProductionOnServer(Building, UnitData->UnitId))
+            {
+                return true;
+            }
+            continue;
+        }
+
+        ServerQueueProduction(Building, UnitData->UnitId);
+        return true;
     }
 
-    if (HasAuthority())
-    {
-        return QueueProductionOnServer(Building, UnitData->UnitId);
-    }
-
-    ServerQueueProduction(Building, UnitData->UnitId);
-    return true;
+    return false;
 }
 
 void ARTSPlayerController::ServerQueueProduction_Implementation(ARTSBuilding* Building, FName UnitId)
@@ -805,6 +1270,20 @@ bool ARTSPlayerController::QueueProductionOnServer(ARTSBuilding* Building, FName
     }
 
     URTSUnitData* UnitData = FindUnitDataById(UnitId);
+    if (!UnitData && Building && Building->BuildingData)
+    {
+        // Fallback to the selected producer data so UI-driven commands do not require duplicate controller lists.
+        for (TObjectPtr<URTSUnitData> TrainableUnitPtr : Building->BuildingData->TrainableUnits)
+        {
+            URTSUnitData* TrainableUnit = TrainableUnitPtr.Get();
+            if (TrainableUnit && TrainableUnit->UnitId == UnitId)
+            {
+                UnitData = TrainableUnit;
+                break;
+            }
+        }
+    }
+
     if (!Building || !UnitData || !Building->CanReceiveCommandsFrom(this))
     {
         return false;
@@ -832,6 +1311,150 @@ ARTSBuilding* ARTSPlayerController::FindFirstOwnedSelectedBuilding() const
         if (IRTSSelectableInterface::Execute_IsOwnedByPlayerState(Building, LocalPlayerState))
         {
             return Building;
+        }
+    }
+
+    return nullptr;
+}
+
+bool ARTSPlayerController::StartWorkerBuildOrderOnServer(
+    ARTSWorkerUnit* Worker,
+    FName BuildingId,
+    FRTSGridCoord OriginCoord
+)
+{
+    if (!HasAuthority() || !Worker || !Worker->CanReceiveCommandsFrom(this))
+    {
+        return false;
+    }
+
+    if (!GridManager)
+    {
+        GridManager = ResolveGridManager();
+    }
+
+    if (!GridManager)
+    {
+        return false;
+    }
+
+    URTSBuildingData* BuildingData = FindBuildableBuildingDataForWorker(Worker, BuildingId);
+    if (!BuildingData)
+    {
+        BuildingData = FindBuildingDataById(BuildingId);
+    }
+
+    if (!BuildingData || !GridManager->CanPlaceBuildingByData(OriginCoord, BuildingData))
+    {
+        return false;
+    }
+
+    ARTSPlayerState* RTSPlayerState = GetPlayerState<ARTSPlayerState>();
+    if (!RTSPlayerState || !RTSPlayerState->CanAfford(BuildingData->MineralCost, BuildingData->VespeneCost))
+    {
+        return false;
+    }
+
+    if (!Worker->BuildComponent)
+    {
+        return false;
+    }
+
+    return Worker->BuildComponent->StartBuildOrder(this, BuildingData, OriginCoord, GridManager);
+}
+
+bool ARTSPlayerController::CompleteWorkerBuildOrder(
+    ARTSWorkerUnit* Worker,
+    FName BuildingId,
+    FRTSGridCoord OriginCoord
+)
+{
+    if (!HasAuthority() || !Worker || !Worker->CanReceiveCommandsFrom(this))
+    {
+        return false;
+    }
+
+    URTSBuildingData* BuildingData = FindBuildableBuildingDataForWorker(Worker, BuildingId);
+    if (!BuildingData)
+    {
+        BuildingData = FindBuildingDataById(BuildingId);
+    }
+
+    if (!BuildingData || !IsWorkerCloseEnoughToBuild(Worker, BuildingData, OriginCoord))
+    {
+        return false;
+    }
+
+    if (!GridManager)
+    {
+        GridManager = ResolveGridManager();
+    }
+
+    ARTSPlayerState* RTSPlayerState = GetPlayerState<ARTSPlayerState>();
+    if (!GridManager
+        || !GridManager->CanPlaceBuildingByData(OriginCoord, BuildingData)
+        || !RTSPlayerState
+        || !RTSPlayerState->CanAfford(BuildingData->MineralCost, BuildingData->VespeneCost))
+    {
+        return false;
+    }
+
+    BuildOnServer(BuildingId, OriginCoord);
+    return true;
+}
+
+bool ARTSPlayerController::IsWorkerCloseEnoughToBuild(
+    ARTSWorkerUnit* Worker,
+    URTSBuildingData* BuildingData,
+    FRTSGridCoord OriginCoord
+)
+{
+    if (!Worker || !BuildingData)
+    {
+        return false;
+    }
+
+    if (!GridManager)
+    {
+        GridManager = ResolveGridManager();
+    }
+
+    if (!GridManager)
+    {
+        return false;
+    }
+
+    FVector BuildLocation;
+    if (!GridManager->GetBuildingCenterLocationOnGround(
+        OriginCoord,
+        FMath::Max(1, BuildingData->GridWidth),
+        FMath::Max(1, BuildingData->GridHeight),
+        BuildLocation
+    ))
+    {
+        return false;
+    }
+
+    return FVector::DistSquared(Worker->GetActorLocation(), BuildLocation)
+        <= FMath::Square(WorkerBuildStartAcceptanceRadius);
+}
+
+URTSBuildingData* ARTSPlayerController::FindBuildableBuildingDataForWorker(
+    ARTSWorkerUnit* Worker,
+    FName BuildingId
+) const
+{
+    if (!Worker || !Worker->UnitData)
+    {
+        return nullptr;
+    }
+
+    for (TObjectPtr<URTSBuildingData> BuildableBuildingPtr : Worker->UnitData->BuildableBuildings)
+    {
+        URTSBuildingData* BuildingData = BuildableBuildingPtr.Get();
+        if (BuildingData && BuildingData->BuildingId == BuildingId)
+        {
+            return BuildingData;
         }
     }
 
@@ -985,6 +1608,45 @@ URTSBuildingData* ARTSPlayerController::FindBuildingDataById(FName BuildingId) c
         }
     }
 
+
+    for (URTSUnitData* UnitData : UnitDataList)
+    {
+        if (!UnitData)
+        {
+            continue;
+        }
+
+        for (TObjectPtr<URTSBuildingData> BuildableBuildingPtr : UnitData->BuildableBuildings)
+        {
+            URTSBuildingData* BuildableBuilding = BuildableBuildingPtr.Get();
+            if (BuildableBuilding && BuildableBuilding->BuildingId == BuildingId)
+            {
+                return BuildableBuilding;
+            }
+        }
+    }
+
+    // Search worker command data as a fallback for server-side build completion.
+    if (UWorld* World = GetWorld())
+    {
+        for (TActorIterator<ARTSWorkerUnit> It(World); It; ++It)
+        {
+            ARTSWorkerUnit* Worker = *It;
+            if (!Worker || !Worker->UnitData)
+            {
+                continue;
+            }
+
+            for (TObjectPtr<URTSBuildingData> BuildableBuildingPtr : Worker->UnitData->BuildableBuildings)
+            {
+                URTSBuildingData* BuildableBuilding = BuildableBuildingPtr.Get();
+                if (BuildableBuilding && BuildableBuilding->BuildingId == BuildingId)
+                {
+                    return BuildableBuilding;
+                }
+            }
+        }
+    }
     // Listen Server Host에서 테스트할 때를 위한 보조 fallback
     if (SelectedBuildingData && SelectedBuildingData->BuildingId == BuildingId)
     {

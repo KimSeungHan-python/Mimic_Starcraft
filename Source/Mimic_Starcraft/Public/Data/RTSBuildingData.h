@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "InputCoreTypes.h"
 #include "RTSBuildingData.generated.h"
 
 class ARTSBuilding;
@@ -39,6 +40,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
     TSubclassOf<ARTSBuilding> BuildingClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
+    FKey CommandHotkey;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building")
     UStaticMesh* PreviewStaticMesh = nullptr;

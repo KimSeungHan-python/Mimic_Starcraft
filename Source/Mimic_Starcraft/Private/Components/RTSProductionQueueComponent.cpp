@@ -44,6 +44,8 @@ void URTSProductionQueueComponent::GetLifetimeReplicatedProps(TArray<FLifetimePr
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
     DOREPLIFETIME(URTSProductionQueueComponent, ProductionQueue);
+    DOREPLIFETIME(URTSProductionQueueComponent, bUseRallyPoint);
+    DOREPLIFETIME(URTSProductionQueueComponent, RallyPointWorldLocation);
 }
 
 bool URTSProductionQueueComponent::CanQueueUnit(URTSUnitData* UnitData, ARTSPlayerState* PlayerState) const
@@ -170,6 +172,33 @@ FTransform URTSProductionQueueComponent::GetSpawnTransform() const
     return FTransform(SpawnRotation, SpawnLocation);
 }
 
+void URTSProductionQueueComponent::SetRallyPoint(const FVector& WorldLocation)
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority())
+    {
+        return;
+    }
+
+    RallyPointWorldLocation = WorldLocation;
+    bUseRallyPoint = true;
+}
+
+void URTSProductionQueueComponent::ClearRallyPoint()
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority())
+    {
+        return;
+    }
+
+    RallyPointWorldLocation = FVector::ZeroVector;
+    bUseRallyPoint = false;
+}
+
+bool URTSProductionQueueComponent::HasRallyPoint() const
+{
+    return bUseRallyPoint;
+}
+
 void URTSProductionQueueComponent::OnRep_ProductionQueue()
 {
     BroadcastQueueChanged();
@@ -250,9 +279,15 @@ void URTSProductionQueueComponent::FinishCurrentProduction()
 
         if (NewUnit)
         {
+            NewUnit->UnitData = UnitData;
             NewUnit->OwningPlayerState = OwningBuilding->OwningPlayerState;
             NewUnit->SetTeamInfo(OwningBuilding->TeamNumber, OwningBuilding->TeamColor);
             NewUnit->RegisterSupplyCost(UnitData->SupplyCost, true);
+
+            if (bUseRallyPoint)
+            {
+                NewUnit->IssueMoveCommand(RallyPointWorldLocation);
+            }
         }
         else if (OwningBuilding->OwningPlayerState)
         {
