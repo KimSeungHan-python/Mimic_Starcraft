@@ -16,6 +16,7 @@ class UMeshComponent;
 class ARTSPlayerController;
 class AController;
 class USceneComponent;
+class URTSHealthComponent;
 
 UENUM(BlueprintType)
 enum class ERTSBuildingState : uint8
@@ -50,6 +51,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<URTSProductionQueueComponent> ProductionQueueComponent;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<URTSHealthComponent> HealthComponent;
 
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     URTSBuildingData* BuildingData;
@@ -136,6 +140,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
     void ClearProductionRallyPoint();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Command")
+    virtual void StopAllCommands();
 
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();

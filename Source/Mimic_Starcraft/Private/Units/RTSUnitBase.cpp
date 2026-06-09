@@ -3,6 +3,8 @@
 
 #include "Units/RTSUnitBase.h"
 #include "Components/MeshComponent.h"
+#include "Components/RTSAttackComponent.h"
+#include "Components/RTSHealthComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -33,6 +35,10 @@ ARTSUnitBase::ARTSUnitBase()
 	SkeletalMeshComponent->SetCanEverAffectNavigation(false);
 	SkeletalMeshComponent->SetHiddenInGame(true);
 	SkeletalMeshComponent->SetVisibility(false);
+
+	HealthComponent = CreateDefaultSubobject<URTSHealthComponent>(TEXT("HealthComponent"));
+	AttackComponent = CreateDefaultSubobject<URTSAttackComponent>(TEXT("AttackComponent"));
+
 }
 
 void ARTSUnitBase::BeginPlay()
@@ -165,6 +171,8 @@ void ARTSUnitBase::RefreshUnitVisual()
 		{
 			SkeletalMeshComponent->SetHiddenInGame(true);
 			SkeletalMeshComponent->SetVisibility(false);
+
+
 			SkeletalMeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			SkeletalMeshComponent->SetCanEverAffectNavigation(false);
 		}
@@ -187,6 +195,21 @@ void ARTSUnitBase::RefreshUnitVisual()
 				}
 			}
 		}
+	}
+
+	if (HealthComponent && UnitData)
+	{
+		HealthComponent->SetMaxHealth(UnitData->MaxHealth, HasAuthority());
+	}
+
+	if (AttackComponent && UnitData)
+	{
+		AttackComponent->ConfigureAttackStats(
+			UnitData->bCanAttack,
+			UnitData->AttackDamage,
+			UnitData->AttackRange,
+			UnitData->AttackCooldown
+		);
 	}
 
 	ApplyTeamVisual();
@@ -226,6 +249,21 @@ void ARTSUnitBase::StopMovement()
 
     bHasMoveTarget = false;
     SetActorTickEnabled(false);
+}
+
+void ARTSUnitBase::StopAllCommands()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    if (AttackComponent)
+    {
+        AttackComponent->StopAttackCommand();
+    }
+
+    StopMovement();
 }
 
 bool ARTSUnitBase::HasReachedLocation(const FVector& TargetLocation, float AcceptanceRadius) const
@@ -270,6 +308,7 @@ bool ARTSUnitBase::RegisterSupplyCost(int32 InSupplyCost, bool bAlreadyReserved)
     return true;
 }
 
+//명령 받을 수 있는지 
 bool ARTSUnitBase::CanReceiveCommandsFrom(AController* Controller) const
 {
     const ARTSPlayerState* PlayerState = Controller

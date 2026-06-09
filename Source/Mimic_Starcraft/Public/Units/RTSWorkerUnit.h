@@ -20,10 +20,12 @@ public:
     TObjectPtr<URTSGatherComponent> GatherComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-    TObjectPtr<URTSWorkerBuildComponent> BuildComponent;#
+    TObjectPtr<URTSWorkerBuildComponent> BuildComponent;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Worker")
     bool GatherFromResource(ARTSResourceNode* ResourceNode);
+
+    virtual void StopAllCommands() override;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Worker")
     void StopWorkerCommand();

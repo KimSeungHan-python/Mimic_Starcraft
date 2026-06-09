@@ -10,6 +10,7 @@ class URTSBuildingData;
 class UAnimInstance;
 class UMaterialInterface;
 class USkeletalMesh;
+class UTexture2D;
 
 UCLASS(BlueprintType, Blueprintable)
 class MIMIC_STARCRAFT_API URTSUnitData : public UPrimaryDataAsset
@@ -39,6 +40,15 @@ public:
     FKey CommandHotkey;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
+    TObjectPtr<UTexture2D> CommandIcon = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Selection")
+    TObjectPtr<UTexture2D> SelectionIcon = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
+    FText CommandTooltip;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Command")
     int32 CommandCardOrder = 0;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
@@ -46,6 +56,9 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
     FText BuildMenuDisplayName;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
+    TObjectPtr<UTexture2D> BuildMenuIcon = nullptr;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Worker", meta = (EditCondition = "bWorker"))
     FName BuildCommandPage = TEXT("Build");
@@ -61,6 +74,24 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Supply")
     int32 SupplyCost = 1;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Combat")
+    float MaxHealth = 45.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Vision", meta = (ClampMin = "0"))
+    int32 SightRadiusCells = 8;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Combat")
+    bool bCanAttack = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Combat", meta = (EditCondition = "bCanAttack"))
+    float AttackDamage = 5.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Combat", meta = (EditCondition = "bCanAttack"))
+    float AttackRange = 175.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Combat", meta = (EditCondition = "bCanAttack"))
+    float AttackCooldown = 1.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Unit|Role")
     bool bWorker = false;

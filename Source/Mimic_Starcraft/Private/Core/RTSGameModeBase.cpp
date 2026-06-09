@@ -12,6 +12,7 @@
 #include "Grid/RTSGridManager.h"
 #include "Units/RTSUnitBase.h"
 #include "Buildings/RTSBuilding.h"
+#include "Resources/RTSResourceNode.h"
 
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
@@ -39,6 +40,7 @@ void ARTSGameModeBase::BeginPlay()
 
 void ARTSGameModeBase::CollectStartCampsIfNeeded()
 {
+	//전체 startcamp 수 확인
 	if (StartCamps.Num() > 0)
 	{
 		return;
@@ -110,6 +112,7 @@ AActor* ARTSGameModeBase::ChoosePlayerStart_Implementation(AController* Player)
 	return Super::ChoosePlayerStart_Implementation(Player);
 }
 
+//새 유저가 접속할때마다
 void ARTSGameModeBase::HandleStartingNewPlayer_Implementation(APlayerController* NewPlayer)
 {
 	if (!NewPlayer)
@@ -146,6 +149,7 @@ void ARTSGameModeBase::InitializePlayerState(APlayerController* NewPlayer, ARTSS
 		return;
 	}
 
+	// Player ID 에 맞게 색을 주는데 이거 후에 수정하면 될듯 UI에서 선택할 수 있게
 	const int32 TeamNumber = PS->GetPlayerId();
 
 	const FLinearColor TeamColor = TeamColors.IsValidIndex(TeamNumber)
@@ -176,7 +180,7 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 		return;
 	}
 
-	URTSRaceStartData* StartData = GetStartData(PS->Race);
+	URTSRaceStartData* StartData = GetStartData(PS->Race);//시작 데이터 가져옴
 	if (!StartData)
 	{
 		UE_LOG(LogTemp, Error, TEXT("RaceStartData is missing."));
@@ -276,7 +280,83 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
         ? StartData->WorkerUnitData->SupplyCost
         : StartData->InitialWorkerSupplyCost;
 
-    const int32 WorkerCount = FMath::Min(StartData->InitialWorkerCount, Camp->WorkerLocalTransforms.Num());
+    TArray<ARTSResourceNode*> NearbyMineralNodes;
+    for (TActorIterator<ARTSResourceNode> It(World); It; ++It)
+    {
+        ARTSResourceNode* ResourceNode = *It;
+        if (ResourceNode && ResourceNode->ResourceType == ERTSResourceType::Minerals && ResourceNode->HasResources())
+        {
+            NearbyMineralNodes.Add(ResourceNode);
+        }
+    }
+
+    const FVector BaseLocation = BaseTransform.GetLocation();
+    NearbyMineralNodes.Sort([BaseLocation](const ARTSResourceNode& Left, const ARTSResourceNode& Right)
+    {
+        return FVector::DistSquared2D(BaseLocation, Left.GetActorLocation())
+            < FVector::DistSquared2D(BaseLocation, Right.GetActorLocation());
+    });
+
+    auto MakeAutoWorkerSpawnTransform = [Camp, GridManager, BaseTransform, BaseWidth, BaseHeight, BaseLocation, &NearbyMineralNodes](int32 WorkerIndex, int32 WorkerCount) -> FTransform
+    {
+        if (NearbyMineralNodes.Num() == 0 && Camp->WorkerOffsetCells.IsValidIndex(WorkerIndex))
+        {
+            return Camp->GetWorkerWorldTransform(WorkerIndex);
+        }
+
+        const FVector ResourceLocation = NearbyMineralNodes.Num() > 0
+            ? NearbyMineralNodes[WorkerIndex % NearbyMineralNodes.Num()]->GetActorLocation()
+            : BaseLocation + BaseTransform.GetRotation().GetForwardVector() * 900.0f;
+
+        FVector Direction = ResourceLocation - BaseLocation;
+        Direction.Z = 0.0f;
+
+        const float ResourceDistance = Direction.Size();
+        if (ResourceDistance <= KINDA_SMALL_NUMBER)
+        {
+            Direction = BaseTransform.GetRotation().GetForwardVector();
+            Direction.Z = 0.0f;
+        }
+
+        if (Direction.IsNearlyZero())
+        {
+            Direction = FVector::ForwardVector;
+        }
+
+        Direction.Normalize();
+        const FVector SideDirection(-Direction.Y, Direction.X, 0.0f);
+
+        const float CellSize = GridManager ? FMath::Max(1.0f, GridManager->CellSize) : 100.0f;
+        const float BaseRadius = FMath::Max(BaseWidth, BaseHeight) * CellSize * 0.5f;
+        const int32 ColumnCount = FMath::Clamp(WorkerCount, 1, 4);
+        const int32 Row = WorkerIndex / ColumnCount;
+        const int32 Col = WorkerIndex % ColumnCount;
+
+        const float MaxForwardDistance = ResourceDistance > KINDA_SMALL_NUMBER
+            ? FMath::Max(BaseRadius + CellSize, ResourceDistance * 0.65f)
+            : BaseRadius + CellSize * 2.0f;
+        const float ForwardDistance = FMath::Clamp(
+            BaseRadius + CellSize * (0.85f + Row * 0.65f),
+            CellSize,
+            MaxForwardDistance
+        );
+        const float SideOffset = (static_cast<float>(Col) - (static_cast<float>(ColumnCount) - 1.0f) * 0.5f) * CellSize * 0.8f;
+
+        FVector SpawnLocation = BaseLocation + Direction * ForwardDistance + SideDirection * SideOffset;
+
+        if (GridManager)
+        {
+            FVector GroundLocation;
+            if (GridManager->GetCellWorldCenterOnGround(GridManager->WorldToGrid(SpawnLocation), GroundLocation))
+            {
+                SpawnLocation.Z = GroundLocation.Z;
+            }
+        }
+
+        return FTransform(Direction.Rotation(), SpawnLocation);
+    };
+
+    const int32 WorkerCount = FMath::Max(0, StartData->InitialWorkerCount);
 
 	for (int32 i = 0; i < WorkerCount; ++i)
 	{
@@ -285,7 +365,7 @@ void ARTSGameModeBase::SpawnInitialBaseAndWorkers(APlayerController* NewPlayer, 
 			continue;
 		}
 
-		const FTransform WorkerTransform = Camp->GetWorkerWorldTransform(i);
+		const FTransform WorkerTransform = MakeAutoWorkerSpawnTransform(i, WorkerCount);
 
 		ARTSUnitBase* Worker = World->SpawnActorDeferred<ARTSUnitBase>(
 			WorkerClass,

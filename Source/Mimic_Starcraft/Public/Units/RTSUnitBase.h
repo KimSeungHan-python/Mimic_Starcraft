@@ -15,6 +15,8 @@ class USceneComponent;
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 class UMeshComponent;
+class URTSAttackComponent;
+class URTSHealthComponent;
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSUnitBase : public AActor, public IRTSSelectableInterface
@@ -35,6 +37,12 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<USkeletalMeshComponent> SkeletalMeshComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<URTSHealthComponent> HealthComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	TObjectPtr<URTSAttackComponent> AttackComponent;
 
 	// Start and ownership state
 
@@ -104,6 +112,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "RTS Unit|Movement")
 	void StopMovement();
+
+	UFUNCTION(BlueprintCallable, Category = "RTS Unit|Command")
+	virtual void StopAllCommands();
 
 	UFUNCTION(BlueprintCallable, Category = "RTS Unit|Movement")
 	bool HasReachedLocation(const FVector& TargetLocation, float AcceptanceRadius) const;

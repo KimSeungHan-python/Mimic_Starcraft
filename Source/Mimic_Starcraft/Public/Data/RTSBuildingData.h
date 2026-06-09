@@ -8,6 +8,7 @@
 class ARTSBuilding;
 class UMaterialInterface;
 class UStaticMesh;
+class UTexture2D;
 class URTSUnitData;
 
 UENUM(BlueprintType)
@@ -47,6 +48,15 @@ public:
     FKey CommandHotkey;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
+    TObjectPtr<UTexture2D> CommandIcon = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Selection")
+    TObjectPtr<UTexture2D> SelectionIcon = nullptr;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
+    FText CommandTooltip;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
     int32 CommandCardOrder = 0;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Command")
@@ -66,6 +76,12 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Supply")
     int32 SupplyProvided = 0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Combat")
+    float MaxHealth = 400.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Vision", meta = (ClampMin = "0"))
+    int32 SightRadiusCells = 10;
 
     // 건설 시간
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building|Construction")

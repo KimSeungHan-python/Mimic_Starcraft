@@ -8,6 +8,7 @@ ARTSPlayerState::ARTSPlayerState()
 	bReplicates = true;
 }
 
+// 게임 서버에서 보내줌 
 void ARTSPlayerState::SetTeamInfo(int32 InTeamNumber, const FLinearColor& InTeamColor, ERTSRace InRace, int32 InCampIndex)
 {
 	TeamNumber = InTeamNumber;

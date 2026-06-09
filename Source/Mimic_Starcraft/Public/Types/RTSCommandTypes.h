@@ -5,6 +5,7 @@
 #include "RTSCommandTypes.generated.h"
 
 class AActor;
+class UTexture2D;
 class URTSBuildingData;
 class URTSUnitData;
 
@@ -15,6 +16,7 @@ enum class ERTSCommandType : uint8
     TrainUnit,
     BuildStructure,
     OpenCommandPage,
+    Stop,
     Back
 };
 
@@ -33,7 +35,13 @@ struct MIMIC_STARCRAFT_API FRTSCommandButton
     FText DisplayName;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    FText TooltipText;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     ERTSCommandType CommandType = ERTSCommandType::None;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    TObjectPtr<UTexture2D> Icon = nullptr;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     FKey Hotkey;
@@ -46,6 +54,21 @@ struct MIMIC_STARCRAFT_API FRTSCommandButton
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     int32 SortOrder = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    int32 MineralCost = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    int32 VespeneCost = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    int32 SupplyCost = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    bool bEnabled = true;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
+    FText DisabledReason;
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Command")
     TObjectPtr<URTSUnitData> UnitData = nullptr;

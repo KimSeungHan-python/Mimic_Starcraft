@@ -64,6 +64,16 @@ bool URTSCommandCardWidget::ExecuteCommandAtSlot(int32 SlotIndex)
     return bExecuted;
 }
 
+bool URTSCommandCardWidget::ExecuteCommand(const FRTSCommandButton& Command)
+{
+    const bool bExecuted = RTSPlayerController
+        ? RTSPlayerController->ExecuteCommandButton(Command)
+        : false;
+
+    RefreshCommands();
+    return bExecuted;
+}
+
 bool URTSCommandCardWidget::ExecuteCommandHotkey(FKey Hotkey)
 {
     const bool bExecuted = RTSPlayerController
@@ -72,4 +82,32 @@ bool URTSCommandCardWidget::ExecuteCommandHotkey(FKey Hotkey)
 
     RefreshCommands();
     return bExecuted;
+}
+
+bool URTSCommandCardWidget::GetCommandAtSlot(int32 SlotIndex, FRTSCommandButton& OutCommand) const
+{
+    for (const FRTSCommandButton& Command : Commands)
+    {
+        if (Command.SlotIndex == SlotIndex)
+        {
+            OutCommand = Command;
+            return true;
+        }
+    }
+
+    OutCommand = FRTSCommandButton();
+    return false;
+}
+
+bool URTSCommandCardWidget::HasCommandAtSlot(int32 SlotIndex) const
+{
+    FRTSCommandButton UnusedCommand;
+    return GetCommandAtSlot(SlotIndex, UnusedCommand);
+}
+
+FText URTSCommandCardWidget::GetCommandHotkeyDisplayText(const FRTSCommandButton& Command) const
+{
+    return Command.Hotkey.IsValid()
+        ? Command.Hotkey.GetDisplayName()
+        : FText::GetEmpty();
 }

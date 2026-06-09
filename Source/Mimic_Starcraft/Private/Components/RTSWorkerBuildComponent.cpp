@@ -1,6 +1,7 @@
 #include "Components/RTSWorkerBuildComponent.h"
 
 #include "Buildings/RTSBuilding.h"
+#include "Components/RTSAttackComponent.h"
 #include "Components/RTSGatherComponent.h"
 #include "Core/RTSPlayerController.h"
 #include "Data/RTSBuildingData.h"
@@ -91,6 +92,10 @@ bool URTSWorkerBuildComponent::StartBuildOrder(
     }
 
     Worker->StopMovement();
+    if (Worker->AttackComponent)
+    {
+        Worker->AttackComponent->StopAttackCommand();
+    }
 
     OwningBuildController = BuildController;
     TargetBuildingData = BuildingData;

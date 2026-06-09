@@ -6,6 +6,44 @@
 #include "Grid/RTSGridManager.h"
 
 #include "Components/PrimitiveComponent.h"
+#include "Net/UnrealNetwork.h"
+
+void ARTSTerranBuilding::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+
+    if (!HasAuthority() || BuildingState != ERTSBuildingState::Flying || !bHasFlyingMoveTarget)
+    {
+        return;
+    }
+
+    const FVector CurrentLocation = GetActorLocation();
+    FVector TargetLocation = FlyingMoveTargetLocation;
+    TargetLocation.Z = CurrentLocation.Z;
+
+    FVector Direction = TargetLocation - CurrentLocation;
+    Direction.Z = 0.0f;
+
+    const float Distance = Direction.Size();
+    if (Distance <= FlyingMovementAcceptanceRadius)
+    {
+        StopFlyingMovement();
+        return;
+    }
+
+    Direction /= Distance;
+    const float Step = FMath::Min(Distance, FlyingMovementSpeed * DeltaTime);
+    SetActorLocation(CurrentLocation + Direction * Step, true);
+    SetActorRotation(Direction.Rotation());
+}
+
+void ARTSTerranBuilding::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(ARTSTerranBuilding, bHasFlyingMoveTarget);
+    DOREPLIFETIME(ARTSTerranBuilding, FlyingMoveTargetLocation);
+}
 
 bool ARTSTerranBuilding::CanLiftOff() const
 {
@@ -38,6 +76,7 @@ void ARTSTerranBuilding::LiftOff()
     );
 
     BuildingState = ERTSBuildingState::Flying;
+    StopFlyingMovement();
 
     TArray<UPrimitiveComponent*> PrimitiveComponents;
     GetComponents<UPrimitiveComponent>(PrimitiveComponents);
@@ -55,6 +94,43 @@ void ARTSTerranBuilding::LiftOff()
     }
 
     OnRep_BuildingState();
+}
+
+bool ARTSTerranBuilding::IssueFlyingMoveCommand(const FVector& TargetLocation)
+{
+    if (!HasAuthority() || BuildingState != ERTSBuildingState::Flying)
+    {
+        return false;
+    }
+
+    FlyingMoveTargetLocation = TargetLocation;
+    bHasFlyingMoveTarget = true;
+    SetActorTickEnabled(true);
+    return true;
+}
+
+void ARTSTerranBuilding::StopFlyingMovement()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    bHasFlyingMoveTarget = false;
+    if (BuildingState != ERTSBuildingState::UnderConstruction)
+    {
+        SetActorTickEnabled(false);
+    }
+}
+
+void ARTSTerranBuilding::StopAllCommands()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    StopFlyingMovement();
 }
 
 bool ARTSTerranBuilding::CanLandAt(FRTSGridCoord TargetOriginCoord) const
@@ -107,6 +183,7 @@ void ARTSTerranBuilding::LandAt(FRTSGridCoord TargetOriginCoord)
 
     GridOriginCoord = TargetOriginCoord;
     BuildingState = ERTSBuildingState::Completed;
+    StopFlyingMovement();
     RegisterToGrid();
 
     TArray<UPrimitiveComponent*> PrimitiveComponents;

@@ -1,5 +1,6 @@
 #include "Buildings/RTSBuilding.h"
 #include "Components/RTSProductionQueueComponent.h"
+#include "Components/RTSHealthComponent.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSBuildingData.h"
 #include "Data/RTSUnitData.h"
@@ -31,6 +32,7 @@ ARTSBuilding::ARTSBuilding()
     MeshComponent->SetCanEverAffectNavigation(true);
 
     ProductionQueueComponent = CreateDefaultSubobject<URTSProductionQueueComponent>(TEXT("ProductionQueueComponent"));
+    HealthComponent = CreateDefaultSubobject<URTSHealthComponent>(TEXT("HealthComponent"));
 }
 
 void ARTSBuilding::BeginPlay()
@@ -358,6 +360,11 @@ void ARTSBuilding::RefreshBuildingVisual()
         FitMeshToGridFootprint(CachedCellSize);
     }
 
+    if (HealthComponent && BuildingData)
+    {
+        HealthComponent->SetMaxHealth(BuildingData->MaxHealth, HasAuthority());
+    }
+
     ApplyTeamVisual();
 }
 
@@ -540,6 +547,14 @@ void ARTSBuilding::ClearProductionRallyPoint()
     }
 
     ProductionQueueComponent->ClearRallyPoint();
+}
+
+void ARTSBuilding::StopAllCommands()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
 }
 
 float ARTSBuilding::GetBuildProgress01() const
