@@ -3,8 +3,11 @@
 
 #include "Units/RTSUnitBase.h"
 #include "Components/MeshComponent.h"
+#include "Components/DecalComponent.h"
 #include "Components/RTSAttackComponent.h"
+#include "Components/RTSCombatEffectsComponent.h"
 #include "Components/RTSHealthComponent.h"
+#include "Components/RTSUnitMovementComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -13,9 +16,13 @@
 #include "Net/UnrealNetwork.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSUnitData.h"
+#include "Spatial/RTSActorSpatialIndex.h"
 
 ARTSUnitBase::ARTSUnitBase()
 {
+	bReplicates = true;
+	SetReplicateMovement(true);
+
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
@@ -36,8 +43,19 @@ ARTSUnitBase::ARTSUnitBase()
 	SkeletalMeshComponent->SetHiddenInGame(true);
 	SkeletalMeshComponent->SetVisibility(false);
 
+	SelectionDecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("SelectionDecalComponent"));
+	SelectionDecalComponent->SetupAttachment(SceneRoot);
+	SelectionDecalComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+	SelectionDecalComponent->SetRelativeLocation(FVector(0.0f, 0.0f, SelectionDecalZOffset));
+	SelectionDecalComponent->DecalSize = SelectionDecalSize;
+	SelectionDecalComponent->SetHiddenInGame(true);
+	SelectionDecalComponent->SetVisibility(false);
+	SelectionDecalComponent->SetFadeScreenSize(0.0f);
+
 	HealthComponent = CreateDefaultSubobject<URTSHealthComponent>(TEXT("HealthComponent"));
 	AttackComponent = CreateDefaultSubobject<URTSAttackComponent>(TEXT("AttackComponent"));
+	CombatEffectsComponent = CreateDefaultSubobject<URTSCombatEffectsComponent>(TEXT("CombatEffectsComponent"));
+	UnitMovementComponent = CreateDefaultSubobject<URTSUnitMovementComponent>(TEXT("UnitMovementComponent"));
 
 }
 
@@ -46,10 +64,26 @@ void ARTSUnitBase::BeginPlay()
 	Super::BeginPlay();
 
 	RefreshUnitVisual();
+
+	if (HasAuthority())
+	{
+		if (ARTSActorSpatialIndex* SpatialIndex = ARTSActorSpatialIndex::GetOrCreate(GetWorld()))
+		{
+			SpatialIndex->RegisterActor(this);
+		}
+	}
 }
 
 void ARTSUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (HasAuthority())
+    {
+        if (ARTSActorSpatialIndex* SpatialIndex = ARTSActorSpatialIndex::FindExisting(GetWorld()))
+        {
+            SpatialIndex->UnregisterActor(this);
+        }
+    }
+
     if (HasAuthority() && bCountsTowardSupply && OwningPlayerState && SupplyCost > 0)
     {
         OwningPlayerState->ReleaseSupply(SupplyCost);
@@ -62,6 +96,11 @@ void ARTSUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ARTSUnitBase::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    if (UnitMovementComponent)
+    {
+        return;
+    }
 
     if (!HasAuthority() || !bHasMoveTarget)
     {
@@ -138,6 +177,27 @@ void ARTSUnitBase::ApplyTeamVisualToMesh(UMeshComponent* TargetMesh)
 	}
 }
 
+void ARTSUnitBase::UpdateSelectionDecal()
+{
+    if (!SelectionDecalComponent)
+    {
+        return;
+    }
+
+    SelectionDecalComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+    SelectionDecalComponent->SetRelativeLocation(FVector(0.0f, 0.0f, SelectionDecalZOffset));
+    SelectionDecalComponent->DecalSize = SelectionDecalSize;
+
+    if (SelectionDecalMaterial)
+    {
+        SelectionDecalComponent->SetDecalMaterial(SelectionDecalMaterial);
+    }
+
+    const bool bShowSelectionDecal = bIsSelected && SelectionDecalMaterial != nullptr;
+    SelectionDecalComponent->SetVisibility(bShowSelectionDecal, true);
+    SelectionDecalComponent->SetHiddenInGame(!bShowSelectionDecal, true);
+}
+
 void ARTSUnitBase::SetUnitData(URTSUnitData* NewUnitData)
 {
 	UnitData = NewUnitData;
@@ -201,7 +261,13 @@ void ARTSUnitBase::RefreshUnitVisual()
 	{
 		HealthComponent->SetMaxHealth(UnitData->MaxHealth, HasAuthority());
 	}
-
+	if (UnitData)
+	{
+		MovementSpeed = FMath::Max(1.0f, UnitData->MovementSpeed);
+		MovementAcceptanceRadius = FMath::Max(1.0f, UnitData->MovementAcceptanceRadius);
+		SelectionDecalMaterial = UnitData->SelectionDecalMaterial;
+		SelectionDecalSize = UnitData->SelectionDecalSize;
+	}
 	if (AttackComponent && UnitData)
 	{
 		AttackComponent->ConfigureAttackStats(
@@ -212,7 +278,13 @@ void ARTSUnitBase::RefreshUnitVisual()
 		);
 	}
 
+	if (CombatEffectsComponent && UnitData)
+	{
+		CombatEffectsComponent->ConfigureFromUnitData(UnitData);
+	}
+
 	ApplyTeamVisual();
+	UpdateSelectionDecal();
 }
 void ARTSUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -235,6 +307,12 @@ void ARTSUnitBase::IssueMoveCommand(const FVector& TargetLocation)
         return;
     }
 
+    if (UnitMovementComponent)
+    {
+        UnitMovementComponent->IssueMoveCommand(TargetLocation);
+        return;
+    }
+
     MoveTargetLocation = TargetLocation;
     bHasMoveTarget = true;
     SetActorTickEnabled(true);
@@ -244,6 +322,12 @@ void ARTSUnitBase::StopMovement()
 {
     if (!HasAuthority())
     {
+        return;
+    }
+
+    if (UnitMovementComponent)
+    {
+        UnitMovementComponent->StopMovement();
         return;
     }
 
@@ -308,7 +392,7 @@ bool ARTSUnitBase::RegisterSupplyCost(int32 InSupplyCost, bool bAlreadyReserved)
     return true;
 }
 
-//∏Ì∑… πﬁ¿ª ºˆ ¿÷¥¬¡ˆ 
+//Î™ÖÎ†π Î∞õÏùÑ ???àÎäîÏßÄ
 bool ARTSUnitBase::CanReceiveCommandsFrom(AController* Controller) const
 {
     const ARTSPlayerState* PlayerState = Controller
@@ -326,8 +410,8 @@ bool ARTSUnitBase::CanBeSelectedBy_Implementation(ARTSPlayerController* Selectin
 void ARTSUnitBase::SetSelectionState_Implementation(bool bSelected)
 {
     bIsSelected = bSelected;
+    UpdateSelectionDecal();
 }
-
 bool ARTSUnitBase::IsSelected_Implementation() const
 {
     return bIsSelected;

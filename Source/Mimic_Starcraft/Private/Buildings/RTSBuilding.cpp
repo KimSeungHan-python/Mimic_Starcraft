@@ -1,5 +1,7 @@
 #include "Buildings/RTSBuilding.h"
 #include "Components/RTSProductionQueueComponent.h"
+#include "Components/DecalComponent.h"
+#include "Components/RTSCombatEffectsComponent.h"
 #include "Components/RTSHealthComponent.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSBuildingData.h"
@@ -15,9 +17,13 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Spatial/RTSActorSpatialIndex.h"
 
 ARTSBuilding::ARTSBuilding()
 {
+    bReplicates = true;
+    SetReplicateMovement(true);
+
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.bStartWithTickEnabled = false;
 
@@ -31,8 +37,18 @@ ARTSBuilding::ARTSBuilding()
     MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
     MeshComponent->SetCanEverAffectNavigation(true);
 
+    SelectionDecalComponent = CreateDefaultSubobject<UDecalComponent>(TEXT("SelectionDecalComponent"));
+    SelectionDecalComponent->SetupAttachment(SceneRoot);
+    SelectionDecalComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+    SelectionDecalComponent->SetRelativeLocation(FVector(0.0f, 0.0f, SelectionDecalZOffset));
+    SelectionDecalComponent->DecalSize = FVector(32.0f, 240.0f, 240.0f);
+    SelectionDecalComponent->SetHiddenInGame(true);
+    SelectionDecalComponent->SetVisibility(false);
+    SelectionDecalComponent->SetFadeScreenSize(0.0f);
+
     ProductionQueueComponent = CreateDefaultSubobject<URTSProductionQueueComponent>(TEXT("ProductionQueueComponent"));
     HealthComponent = CreateDefaultSubobject<URTSHealthComponent>(TEXT("HealthComponent"));
+    CombatEffectsComponent = CreateDefaultSubobject<URTSCombatEffectsComponent>(TEXT("CombatEffectsComponent"));
 }
 
 void ARTSBuilding::BeginPlay()
@@ -46,6 +62,14 @@ void ARTSBuilding::BeginPlay()
 
     RefreshBuildingVisual();
 
+    if (HasAuthority() && !bIsPreviewBuilding)
+    {
+        if (ARTSActorSpatialIndex* SpatialIndex = ARTSActorSpatialIndex::GetOrCreate(GetWorld()))
+        {
+            SpatialIndex->RegisterActor(this);
+        }
+    }
+
     if (!HasAuthority())
     {
         RegisterToLocalGridIfNeeded();
@@ -56,6 +80,14 @@ void ARTSBuilding::BeginPlay()
 
 void ARTSBuilding::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    if (HasAuthority())
+    {
+        if (ARTSActorSpatialIndex* SpatialIndex = ARTSActorSpatialIndex::FindExisting(GetWorld()))
+        {
+            SpatialIndex->UnregisterActor(this);
+        }
+    }
+
     UnregisterFromGrid();
     Super::EndPlay(EndPlayReason);
 }
@@ -328,8 +360,34 @@ void ARTSBuilding::OnRep_BuildingState()
 }
 
 
-void ARTSBuilding::RefreshBuildingVisual()
+void ARTSBuilding::UpdateSelectionDecal()
 {
+    if (!SelectionDecalComponent)
+    {
+        return;
+    }
+
+    const float FootprintSizeX = FMath::Max(1, GridWidth) * CachedCellSize;
+    const float FootprintSizeY = FMath::Max(1, GridHeight) * CachedCellSize;
+    const FVector EffectiveDecalSize = SelectionDecalSize.IsNearlyZero()
+        ? FVector(32.0f, FootprintSizeX * 1.08f, FootprintSizeY * 1.08f)
+        : SelectionDecalSize;
+
+    SelectionDecalComponent->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+    SelectionDecalComponent->SetRelativeLocation(FVector(0.0f, 0.0f, SelectionDecalZOffset));
+    SelectionDecalComponent->DecalSize = EffectiveDecalSize;
+
+    if (SelectionDecalMaterial)
+    {
+        SelectionDecalComponent->SetDecalMaterial(SelectionDecalMaterial);
+    }
+
+    const bool bShowSelectionDecal = bIsSelected && SelectionDecalMaterial != nullptr && !bIsPreviewBuilding;
+    SelectionDecalComponent->SetVisibility(bShowSelectionDecal, true);
+    SelectionDecalComponent->SetHiddenInGame(!bShowSelectionDecal, true);
+}
+
+void ARTSBuilding::RefreshBuildingVisual(){
     if (!MeshComponent)
     {
         return;
@@ -340,12 +398,13 @@ void ARTSBuilding::RefreshBuildingVisual()
         UStaticMesh* DesiredMesh = BuildingData->BuildingStaticMesh
             ? BuildingData->BuildingStaticMesh
             : BuildingData->PreviewStaticMesh;
-
         if (DesiredMesh)
         {
             MeshComponent->SetStaticMesh(DesiredMesh);
         }
 
+        SelectionDecalMaterial = BuildingData->SelectionDecalMaterial;
+        SelectionDecalSize = BuildingData->SelectionDecalSize;
         for (int32 MaterialIndex = 0; MaterialIndex < BuildingData->OverrideMaterials.Num(); ++MaterialIndex)
         {
             if (BuildingData->OverrideMaterials[MaterialIndex])
@@ -365,7 +424,13 @@ void ARTSBuilding::RefreshBuildingVisual()
         HealthComponent->SetMaxHealth(BuildingData->MaxHealth, HasAuthority());
     }
 
+    if (CombatEffectsComponent && BuildingData)
+    {
+        CombatEffectsComponent->ConfigureDeathEffect(BuildingData->DeathEffect, BuildingData->DeathSound);
+    }
+
     ApplyTeamVisual();
+    UpdateSelectionDecal();
 }
 
 void ARTSBuilding::RegisterToLocalGridIfNeeded()
@@ -531,14 +596,18 @@ bool ARTSBuilding::QueueUnitProduction(URTSUnitData* UnitData)
 }
 void ARTSBuilding::SetProductionRallyPoint(const FVector& WorldLocation)
 {
+    SetProductionRallyPointTarget(WorldLocation, nullptr);
+}
+
+void ARTSBuilding::SetProductionRallyPointTarget(const FVector& WorldLocation, ARTSResourceNode* ResourceTarget)
+{
     if (!HasAuthority() || !ProductionQueueComponent)
     {
         return;
     }
 
-    ProductionQueueComponent->SetRallyPoint(WorldLocation);
+    ProductionQueueComponent->SetRallyPointTarget(WorldLocation, ResourceTarget);
 }
-
 void ARTSBuilding::ClearProductionRallyPoint()
 {
     if (!HasAuthority() || !ProductionQueueComponent)
@@ -737,8 +806,8 @@ bool ARTSBuilding::CanBeSelectedBy_Implementation(ARTSPlayerController* Selectin
 void ARTSBuilding::SetSelectionState_Implementation(bool bSelected)
 {
     bIsSelected = bSelected;
+    UpdateSelectionDecal();
 }
-
 bool ARTSBuilding::IsSelected_Implementation() const
 {
     return bIsSelected;

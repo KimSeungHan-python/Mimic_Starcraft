@@ -138,6 +138,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Command|Attack")
     FKey AttackCommandModifierKey = EKeys::A;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Mouse")
+    bool bLockMouseToViewport = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Mouse", meta = (ClampMin = "0"))
+    float MouseViewportClampPadding = 1.0f;
+
     UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
     TArray<TObjectPtr<AActor>> SelectedActors;
 
@@ -304,7 +310,7 @@ protected:
     void ServerIssueGatherCommand(const TArray<ARTSWorkerUnit*>& Workers, ARTSResourceNode* ResourceNode);
 
     UFUNCTION(Server, Reliable)
-    void ServerSetRallyPoint(const TArray<ARTSBuilding*>& Buildings, FVector TargetLocation);
+    void ServerSetRallyPoint(const TArray<ARTSBuilding*>& Buildings, FVector TargetLocation, ARTSResourceNode* ResourceTarget);
 
 private:
     bool GetMouseWorldLocation(FVector& OutLocation) const;
@@ -352,9 +358,12 @@ private:
     void StopCommandsOnServer(const TArray<ARTSUnitBase*>& Units, const TArray<ARTSBuilding*>& Buildings);
     void IssueFlyingBuildingMoveCommandOnServer(const TArray<ARTSTerranBuilding*>& Buildings, const FVector& TargetLocation);
     void IssueGatherCommandOnServer(const TArray<ARTSWorkerUnit*>& Workers, ARTSResourceNode* ResourceNode);
-    void IssueRallyPointCommandOnServer(const TArray<ARTSBuilding*>& Buildings, const FVector& TargetLocation);
+    void IssueRallyPointCommandOnServer(const TArray<ARTSBuilding*>& Buildings, const FVector& TargetLocation, ARTSResourceNode* ResourceTarget);
     bool IsAttackCommandModifierDown() const;
     bool IsEnemyActorForLocalPlayer(AActor* Actor) const;
+    void ConfigureMouseInputMode();
+    void ClampMouseToViewport();
+    bool GetClampedMousePosition(FVector2D& OutMousePosition) const;
     void ShowCommandFeedback(const FVector& WorldLocation, bool bTargetActorFeedback, bool bAttackCommandFeedback) const;
     ARTSBuilding* FindFirstOwnedSelectedBuilding() const;
     URTSBuildingData* FindBuildingDataById(FName BuildingId) const;

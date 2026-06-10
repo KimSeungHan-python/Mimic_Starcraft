@@ -20,4 +20,34 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Selection")
     float SelectionBorderThickness = 1.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    bool bDrawSelectedActorHealthBars = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    float HealthBarWidth = 54.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    float HealthBarHeight = 5.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    float HealthBarWorldOffsetZ = 24.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    FLinearColor HealthBarBackgroundColor = FLinearColor(0.02f, 0.02f, 0.02f, 0.85f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    FLinearColor HighHealthColor = FLinearColor(0.1f, 0.85f, 0.2f, 0.95f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    FLinearColor MediumHealthColor = FLinearColor(1.0f, 0.78f, 0.05f, 0.95f);
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Health Bars")
+    FLinearColor LowHealthColor = FLinearColor(1.0f, 0.1f, 0.05f, 0.95f);
+
+protected:
+    void DrawSelectionBox(const class ARTSPlayerController* RTSPC);
+    void DrawSelectedActorHealthBars(const class ARTSPlayerController* RTSPC);
+    void DrawActorHealthBar(AActor* Actor, const class ARTSPlayerController* RTSPC);
+    FLinearColor GetHealthBarColor(float HealthFraction) const;
 };

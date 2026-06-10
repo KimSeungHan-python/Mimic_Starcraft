@@ -6,6 +6,8 @@
 
 class ARTSBuilding;
 class ARTSPlayerState;
+class ARTSResourceNode;
+class ARTSUnitBase;
 class URTSUnitData;
 
 USTRUCT(BlueprintType)
@@ -47,11 +49,17 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Production|Spawn")
     FVector SpawnPointLocalOffset = FVector(300.0f, 0.0f, 0.0f);
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Production|Spawn", meta = (ClampMin = "0"))
+    int32 SpawnSearchRadiusCells = 6;
+
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Production|Rally")
     bool bUseRallyPoint = false;
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Production|Rally")
     FVector RallyPointWorldLocation = FVector::ZeroVector;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Production|Rally")
+    TObjectPtr<ARTSResourceNode> RallyResourceTarget = nullptr;
 
     UPROPERTY(ReplicatedUsing = OnRep_ProductionQueue, BlueprintReadOnly, Category = "RTS Production")
     TArray<FRTSProductionQueueItem> ProductionQueue;
@@ -81,6 +89,9 @@ public:
     void SetRallyPoint(const FVector& WorldLocation);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
+    void SetRallyPointTarget(const FVector& WorldLocation, ARTSResourceNode* ResourceTarget);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
     void ClearRallyPoint();
 
     UFUNCTION(BlueprintCallable, Category = "RTS Production|Rally")
@@ -94,6 +105,9 @@ private:
     ARTSBuilding* GetOwningBuilding() const;
     ARTSPlayerState* ResolvePlayerState(ARTSPlayerState* ExplicitPlayerState) const;
     float GetServerTimeSeconds() const;
+    FVector GetDesiredSpawnLocation() const;
+    bool FindNearestWalkableSpawnLocation(const FVector& DesiredWorldLocation, FVector& OutLocation) const;
+    void ApplyProductionRally(ARTSUnitBase* NewUnit) const;
     void ProcessProduction();
     void FinishCurrentProduction();
     void StartNextQueueItemIfNeeded();

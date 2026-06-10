@@ -100,6 +100,9 @@ public:
     bool IsCellPlaceable(FRTSGridCoord Coord) const;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Grid")
+    bool IsCellWalkable(FRTSGridCoord Coord) const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Grid")
     bool CanPlaceBuilding(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const;
 
     UFUNCTION(BlueprintCallable, Category = "RTS Grid")

@@ -1,9 +1,11 @@
 #include "Components/RTSAttackComponent.h"
 
 #include "Buildings/RTSBuilding.h"
+#include "Components/RTSCombatEffectsComponent.h"
 #include "Components/RTSHealthComponent.h"
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
+#include "Spatial/RTSActorSpatialIndex.h"
 #include "Units/RTSUnitBase.h"
 
 URTSAttackComponent::URTSAttackComponent()
@@ -203,6 +205,20 @@ AActor* URTSAttackComponent::FindEnemyInAttackRange() const
         }
     };
 
+    ARTSActorSpatialIndex* SpatialIndex = ResolveSpatialIndex();
+    if (SpatialIndex && SpatialIndex->GetRegisteredActorCount() > 0)
+    {
+        TArray<AActor*> NearbyActors;
+        SpatialIndex->QueryActorsInRadius(GetOwner()->GetActorLocation(), AttackRange, NearbyActors);
+
+        for (AActor* NearbyActor : NearbyActors)
+        {
+            ConsiderTarget(NearbyActor);
+        }
+
+        return BestTarget;
+    }
+
     for (TActorIterator<ARTSUnitBase> It(World); It; ++It)
     {
         ConsiderTarget(*It);
@@ -218,6 +234,12 @@ AActor* URTSAttackComponent::FindEnemyInAttackRange() const
     }
 
     return BestTarget;
+}
+
+ARTSActorSpatialIndex* URTSAttackComponent::ResolveSpatialIndex() const
+{
+    UWorld* World = GetWorld();
+    return World ? ARTSActorSpatialIndex::GetOrCreate(World) : nullptr;
 }
 
 void URTSAttackComponent::ProcessAttackTarget(float DeltaTime)
@@ -282,8 +304,21 @@ void URTSAttackComponent::AttackTargetNow(AActor* Candidate)
         return;
     }
 
+    OnAttackStarted.Broadcast(this, Candidate);
+
+    if (URTSCombatEffectsComponent* CombatEffectsComponent = GetOwner()->FindComponentByClass<URTSCombatEffectsComponent>())
+    {
+        if (CombatEffectsComponent->ExecuteAttack(Candidate, AttackDamage, GetOwner()))
+        {
+            CooldownRemaining = AttackCooldown;
+            OnAttackResolved.Broadcast(this, Candidate);
+            return;
+        }
+    }
+
     HealthComponent->ApplyDamage(AttackDamage, GetOwner());
     CooldownRemaining = AttackCooldown;
+    OnAttackResolved.Broadcast(this, Candidate);
 }
 
 void URTSAttackComponent::MoveOwnerToward(const FVector& WorldLocation)

@@ -5,6 +5,10 @@
 #include "RTSAttackComponent.generated.h"
 
 class URTSHealthComponent;
+class URTSAttackComponent;
+class ARTSActorSpatialIndex;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FRTSAttackEvent, URTSAttackComponent*, AttackComponent, AActor*, TargetActor);
 
 UENUM(BlueprintType)
 enum class ERTSAttackCommandMode : uint8
@@ -50,6 +54,12 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Attack")
     FVector AttackMoveLocation = FVector::ZeroVector;
 
+    UPROPERTY(BlueprintAssignable, Category = "RTS Attack")
+    FRTSAttackEvent OnAttackStarted;
+
+    UPROPERTY(BlueprintAssignable, Category = "RTS Attack")
+    FRTSAttackEvent OnAttackResolved;
+
     UFUNCTION(BlueprintCallable, Category = "RTS Attack")
     void ConfigureAttackStats(bool bNewCanAttack, float NewDamage, float NewRange, float NewCooldown);
 
@@ -77,6 +87,7 @@ protected:
     bool IsTargetInRange(AActor* Candidate) const;
     bool HasReachedAttackMoveLocation() const;
     AActor* FindEnemyInAttackRange() const;
+    ARTSActorSpatialIndex* ResolveSpatialIndex() const;
     void ProcessAttackTarget(float DeltaTime);
     void ProcessAttackMove(float DeltaTime);
     void AttackTargetNow(AActor* Candidate);

@@ -3,7 +3,10 @@
 #include "Buildings/RTSBuilding.h"
 #include "Core/RTSPlayerState.h"
 #include "Data/RTSUnitData.h"
+#include "Grid/RTSGridManager.h"
+#include "Resources/RTSResourceNode.h"
 #include "Units/RTSUnitBase.h"
+#include "Units/RTSWorkerUnit.h"
 
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
@@ -46,6 +49,7 @@ void URTSProductionQueueComponent::GetLifetimeReplicatedProps(TArray<FLifetimePr
     DOREPLIFETIME(URTSProductionQueueComponent, ProductionQueue);
     DOREPLIFETIME(URTSProductionQueueComponent, bUseRallyPoint);
     DOREPLIFETIME(URTSProductionQueueComponent, RallyPointWorldLocation);
+    DOREPLIFETIME(URTSProductionQueueComponent, RallyResourceTarget);
 }
 
 bool URTSProductionQueueComponent::CanQueueUnit(URTSUnitData* UnitData, ARTSPlayerState* PlayerState) const
@@ -166,7 +170,13 @@ FTransform URTSProductionQueueComponent::GetSpawnTransform() const
         return FTransform::Identity;
     }
 
-    const FVector SpawnLocation = Owner->GetActorTransform().TransformPosition(SpawnPointLocalOffset);
+    FVector SpawnLocation = GetDesiredSpawnLocation();
+    FVector AdjustedSpawnLocation;
+    if (FindNearestWalkableSpawnLocation(SpawnLocation, AdjustedSpawnLocation))
+    {
+        SpawnLocation = AdjustedSpawnLocation;
+    }
+
     const FRotator SpawnRotation = Owner->GetActorRotation();
 
     return FTransform(SpawnRotation, SpawnLocation);
@@ -174,12 +184,22 @@ FTransform URTSProductionQueueComponent::GetSpawnTransform() const
 
 void URTSProductionQueueComponent::SetRallyPoint(const FVector& WorldLocation)
 {
+    SetRallyPointTarget(WorldLocation, nullptr);
+}
+
+void URTSProductionQueueComponent::SetRallyPointTarget(const FVector& WorldLocation, ARTSResourceNode* ResourceTarget)
+{
     if (!GetOwner() || !GetOwner()->HasAuthority())
     {
         return;
     }
 
-    RallyPointWorldLocation = WorldLocation;
+    RallyResourceTarget = ResourceTarget && ResourceTarget->HasResources()
+        ? ResourceTarget
+        : nullptr;
+    RallyPointWorldLocation = RallyResourceTarget
+        ? RallyResourceTarget->GetGatherLocation()
+        : WorldLocation;
     bUseRallyPoint = true;
 }
 
@@ -191,6 +211,7 @@ void URTSProductionQueueComponent::ClearRallyPoint()
     }
 
     RallyPointWorldLocation = FVector::ZeroVector;
+    RallyResourceTarget = nullptr;
     bUseRallyPoint = false;
 }
 
@@ -235,6 +256,97 @@ float URTSProductionQueueComponent::GetServerTimeSeconds() const
     }
 
     return World->GetTimeSeconds();
+}
+
+FVector URTSProductionQueueComponent::GetDesiredSpawnLocation() const
+{
+    const AActor* Owner = GetOwner();
+    return Owner
+        ? Owner->GetActorTransform().TransformPosition(SpawnPointLocalOffset)
+        : FVector::ZeroVector;
+}
+
+bool URTSProductionQueueComponent::FindNearestWalkableSpawnLocation(
+    const FVector& DesiredWorldLocation,
+    FVector& OutLocation
+) const
+{
+    const ARTSBuilding* OwningBuilding = GetOwningBuilding();
+    ARTSGridManager* GridManager = OwningBuilding ? OwningBuilding->OwningGridManager.Get() : nullptr;
+
+    if (!GridManager)
+    {
+        return false;
+    }
+
+    const FRTSGridCoord DesiredCoord = GridManager->WorldToGrid(DesiredWorldLocation);
+    float BestDistSq = TNumericLimits<float>::Max();
+    bool bFoundLocation = false;
+
+    for (int32 Radius = 0; Radius <= SpawnSearchRadiusCells; ++Radius)
+    {
+        for (int32 Y = -Radius; Y <= Radius; ++Y)
+        {
+            for (int32 X = -Radius; X <= Radius; ++X)
+            {
+                if (Radius > 0 && FMath::Max(FMath::Abs(X), FMath::Abs(Y)) != Radius)
+                {
+                    continue;
+                }
+
+                const FRTSGridCoord CandidateCoord(DesiredCoord.X + X, DesiredCoord.Y + Y);
+                if (!GridManager->IsCellWalkable(CandidateCoord))
+                {
+                    continue;
+                }
+
+                FVector CandidateLocation;
+                if (!GridManager->GetCellWorldCenterOnGround(CandidateCoord, CandidateLocation))
+                {
+                    continue;
+                }
+
+                const float DistSq = FVector::DistSquared2D(DesiredWorldLocation, CandidateLocation);
+                if (DistSq < BestDistSq)
+                {
+                    BestDistSq = DistSq;
+                    OutLocation = CandidateLocation;
+                    bFoundLocation = true;
+                }
+            }
+        }
+
+        if (bFoundLocation)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void URTSProductionQueueComponent::ApplyProductionRally(ARTSUnitBase* NewUnit) const
+{
+    if (!NewUnit || !bUseRallyPoint)
+    {
+        return;
+    }
+
+    if (RallyResourceTarget && RallyResourceTarget->HasResources())
+    {
+        if (ARTSWorkerUnit* Worker = Cast<ARTSWorkerUnit>(NewUnit))
+        {
+            if (Worker->GatherFromResource(RallyResourceTarget))
+            {
+                return;
+            }
+        }
+
+        NewUnit->IssueMoveCommand(RallyResourceTarget->GetGatherLocation());
+        return;
+    }
+
+    NewUnit->IssueMoveCommand(RallyPointWorldLocation);
 }
 
 void URTSProductionQueueComponent::ProcessProduction()
@@ -284,10 +396,7 @@ void URTSProductionQueueComponent::FinishCurrentProduction()
             NewUnit->SetTeamInfo(OwningBuilding->TeamNumber, OwningBuilding->TeamColor);
             NewUnit->RegisterSupplyCost(UnitData->SupplyCost, true);
 
-            if (bUseRallyPoint)
-            {
-                NewUnit->IssueMoveCommand(RallyPointWorldLocation);
-            }
+            ApplyProductionRally(NewUnit);
         }
         else if (OwningBuilding->OwningPlayerState)
         {

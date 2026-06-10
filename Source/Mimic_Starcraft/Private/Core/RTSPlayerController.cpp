@@ -43,14 +43,7 @@ void ARTSPlayerController::BeginPlay()
 {
     Super::BeginPlay();
     
-    bShowMouseCursor = true;
-    DefaultMouseCursor = EMouseCursor::Default;
-
-    FInputModeGameAndUI InputMode;
-    InputMode.SetHideCursorDuringCapture(false);
-    InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-
-    SetInputMode(InputMode);
+    ConfigureMouseInputMode();
 
     if (!GridManager)
     {
@@ -85,9 +78,95 @@ void ARTSPlayerController::AddPlayerMappingContext()
     Subsystem->AddMappingContext(PlayerMappingContext, PlayerMappingPriority);
 }
 
+void ARTSPlayerController::ConfigureMouseInputMode()
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+
+    bShowMouseCursor = true;
+    DefaultMouseCursor = EMouseCursor::Default;
+    bEnableClickEvents = true;
+    bEnableMouseOverEvents = true;
+
+    FInputModeGameAndUI InputMode;
+    InputMode.SetHideCursorDuringCapture(false);
+    InputMode.SetLockMouseToViewportBehavior(
+        bLockMouseToViewport ? EMouseLockMode::LockAlways : EMouseLockMode::DoNotLock
+    );
+
+    SetInputMode(InputMode);
+}
+
+void ARTSPlayerController::ClampMouseToViewport()
+{
+    if (!IsLocalController() || !bLockMouseToViewport)
+    {
+        return;
+    }
+
+    float RawMouseX = 0.0f;
+    float RawMouseY = 0.0f;
+    if (!GetMousePosition(RawMouseX, RawMouseY))
+    {
+        return;
+    }
+
+    FVector2D ClampedMousePosition;
+    if (!GetClampedMousePosition(ClampedMousePosition))
+    {
+        return;
+    }
+
+    if (!FMath::IsNearlyEqual(RawMouseX, ClampedMousePosition.X, 0.5f)
+        || !FMath::IsNearlyEqual(RawMouseY, ClampedMousePosition.Y, 0.5f))
+    {
+        SetMouseLocation(
+            FMath::RoundToInt(ClampedMousePosition.X),
+            FMath::RoundToInt(ClampedMousePosition.Y)
+        );
+    }
+}
+
+bool ARTSPlayerController::GetClampedMousePosition(FVector2D& OutMousePosition) const
+{
+    int32 ViewportX = 0;
+    int32 ViewportY = 0;
+    GetViewportSize(ViewportX, ViewportY);
+
+    if (ViewportX <= 0 || ViewportY <= 0)
+    {
+        return false;
+    }
+
+    float MouseX = 0.0f;
+    float MouseY = 0.0f;
+    if (!GetMousePosition(MouseX, MouseY))
+    {
+        return false;
+    }
+
+    const float ViewportWidth = static_cast<float>(ViewportX);
+    const float ViewportHeight = static_cast<float>(ViewportY);
+    const float MaxSafePadding = FMath::Max(0.0f, FMath::Min(ViewportWidth, ViewportHeight) * 0.5f - 1.0f);
+    const float Padding = FMath::Clamp(MouseViewportClampPadding, 0.0f, MaxSafePadding);
+    const float MinX = Padding;
+    const float MinY = Padding;
+    const float MaxX = FMath::Max(MinX, ViewportWidth - 1.0f - Padding);
+    const float MaxY = FMath::Max(MinY, ViewportHeight - 1.0f - Padding);
+
+    OutMousePosition = FVector2D(
+        FMath::Clamp(MouseX, MinX, MaxX),
+        FMath::Clamp(MouseY, MinY, MaxY)
+    );
+    return true;
+}
 void ARTSPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+
+    ClampMouseToViewport();
 
     if (bIsInBuildMode)
     {
@@ -386,9 +465,15 @@ void ARTSPlayerController::CancelBuildMode()
 
 bool ARTSPlayerController::GetMouseWorldLocation(FVector& OutLocation) const
 {
-    FHitResult HitResult;
+    FVector2D MousePosition;
+    if (!GetClampedMousePosition(MousePosition))
+    {
+        return false;
+    }
 
-    const bool bHit = GetHitResultUnderCursor(
+    FHitResult HitResult;
+    const bool bHit = GetHitResultAtScreenPosition(
+        MousePosition,
         GroundTraceChannel,
         false,
         HitResult
@@ -564,25 +649,23 @@ void ARTSPlayerController::BeginSelection()
         return;
     }
 
-    float MouseX = 0.0f;
-    float MouseY = 0.0f;
-    if (!GetMousePosition(MouseX, MouseY))
+    FVector2D MousePosition;
+    if (!GetClampedMousePosition(MousePosition))
     {
         return;
     }
 
     bIsDraggingSelection = true;
-    SelectionDragStart = FVector2D(MouseX, MouseY);
+    SelectionDragStart = MousePosition;
     SelectionDragEnd = SelectionDragStart;
 }
 
 void ARTSPlayerController::UpdateSelectionDrag()
 {
-    float MouseX = 0.0f;
-    float MouseY = 0.0f;
-    if (GetMousePosition(MouseX, MouseY))
+    FVector2D MousePosition;
+    if (GetClampedMousePosition(MousePosition))
     {
-        SelectionDragEnd = FVector2D(MouseX, MouseY);
+        SelectionDragEnd = MousePosition;
     }
 }
 
@@ -651,8 +734,15 @@ void ARTSPlayerController::SelectActor(AActor* Actor, bool bAppendSelection)
 
 void ARTSPlayerController::SelectSingleActorUnderCursor(bool bAppendSelection)
 {
+    FVector2D MousePosition;
+    if (!GetClampedMousePosition(MousePosition))
+    {
+        return;
+    }
+
     FHitResult HitResult;
-    const bool bHit = GetHitResultUnderCursor(
+    const bool bHit = GetHitResultAtScreenPosition(
+        MousePosition,
         SelectionTraceChannel,
         false,
         HitResult
@@ -1696,8 +1786,15 @@ void ARTSPlayerController::IssueSmartCommand()
         return;
     }
 
+    FVector2D MousePosition;
+    if (!GetClampedMousePosition(MousePosition))
+    {
+        return;
+    }
+
     FHitResult HitResult;
-    const bool bHit = GetHitResultUnderCursor(
+    const bool bHit = GetHitResultAtScreenPosition(
+        MousePosition,
         SelectionTraceChannel,
         false,
         HitResult
@@ -1746,21 +1843,34 @@ void ARTSPlayerController::IssueSmartCommand()
         return;
     }
 
+    const TArray<ARTSBuilding*> Buildings = GetOwnedSelectedBuildings();
+
     if (ARTSResourceNode* ResourceNode = Cast<ARTSResourceNode>(HitActor))
     {
         const TArray<ARTSWorkerUnit*> Workers = GetOwnedSelectedWorkers();
-        if (Workers.Num() == 0)
+        if (Workers.Num() > 0)
         {
+            if (HasAuthority())
+            {
+                IssueGatherCommandOnServer(Workers, ResourceNode);
+            }
+            else
+            {
+                ServerIssueGatherCommand(Workers, ResourceNode);
+            }
             return;
         }
 
-        if (HasAuthority())
+        if (Buildings.Num() > 0)
         {
-            IssueGatherCommandOnServer(Workers, ResourceNode);
-        }
-        else
-        {
-            ServerIssueGatherCommand(Workers, ResourceNode);
+            if (HasAuthority())
+            {
+                IssueRallyPointCommandOnServer(Buildings, ResourceNode->GetGatherLocation(), ResourceNode);
+            }
+            else
+            {
+                ServerSetRallyPoint(Buildings, ResourceNode->GetGatherLocation(), ResourceNode);
+            }
         }
         return;
     }
@@ -1778,7 +1888,6 @@ void ARTSPlayerController::IssueSmartCommand()
         return;
     }
 
-    const TArray<ARTSBuilding*> Buildings = GetOwnedSelectedBuildings();
     if (Buildings.Num() == 0)
     {
         return;
@@ -1800,11 +1909,11 @@ void ARTSPlayerController::IssueSmartCommand()
 
     if (HasAuthority())
     {
-        IssueRallyPointCommandOnServer(Buildings, HitResult.Location);
+        IssueRallyPointCommandOnServer(Buildings, HitResult.Location, nullptr);
     }
     else
     {
-        ServerSetRallyPoint(Buildings, HitResult.Location);
+        ServerSetRallyPoint(Buildings, HitResult.Location, nullptr);
     }
 }
 void ARTSPlayerController::ServerIssueMoveCommand_Implementation(
@@ -1856,10 +1965,11 @@ void ARTSPlayerController::ServerIssueGatherCommand_Implementation(
 
 void ARTSPlayerController::ServerSetRallyPoint_Implementation(
     const TArray<ARTSBuilding*>& Buildings,
-    FVector TargetLocation
+    FVector TargetLocation,
+    ARTSResourceNode* ResourceTarget
 )
 {
-    IssueRallyPointCommandOnServer(Buildings, TargetLocation);
+    IssueRallyPointCommandOnServer(Buildings, TargetLocation, ResourceTarget);
 }
 void ARTSPlayerController::IssueAttackTargetCommandOnServer(
     const TArray<ARTSUnitBase*>& Units,
@@ -2016,7 +2126,8 @@ void ARTSPlayerController::IssueGatherCommandOnServer(
 
 void ARTSPlayerController::IssueRallyPointCommandOnServer(
     const TArray<ARTSBuilding*>& Buildings,
-    const FVector& TargetLocation
+    const FVector& TargetLocation,
+    ARTSResourceNode* ResourceTarget
 )
 {
     if (!HasAuthority())
@@ -2031,7 +2142,7 @@ void ARTSPlayerController::IssueRallyPointCommandOnServer(
             continue;
         }
 
-        Building->SetProductionRallyPoint(TargetLocation);
+        Building->SetProductionRallyPointTarget(TargetLocation, ResourceTarget);
     }
 }
 bool ARTSPlayerController::QueueProductionForSelectedBuilding(URTSUnitData* UnitData)

@@ -328,6 +328,27 @@ bool ARTSGridManager::IsCellPlaceable(FRTSGridCoord Coord) const
         && !Cell.bOccupied;
 }
 
+bool ARTSGridManager::IsCellWalkable(FRTSGridCoord Coord) const
+{
+    if (!IsValidCoord(Coord))
+    {
+        return false;
+    }
+
+    const int32 Index = CoordToIndex(Coord);
+
+    if (!Cells.IsValidIndex(Index))
+    {
+        return false;
+    }
+
+    const FRTSGridCell& Cell = Cells[Index];
+
+    return Cell.bHasGround
+        && Cell.bWalkable
+        && !Cell.bOccupied;
+}
+
 bool ARTSGridManager::CanPlaceBuilding(FRTSGridCoord OriginCoord, int32 Width, int32 Height) const
 {
     if (Width <= 0 || Height <= 0)

@@ -12,10 +12,14 @@ class URTSProductionQueueComponent;
 class ARTSGridManager;
 class ARTSPlayerState;
 class UStaticMeshComponent;
+class UDecalComponent;
 class UMeshComponent;
+class UMaterialInterface;
 class ARTSPlayerController;
+class ARTSResourceNode;
 class AController;
 class USceneComponent;
+class URTSCombatEffectsComponent;
 class URTSHealthComponent;
 
 UENUM(BlueprintType)
@@ -43,32 +47,48 @@ protected:
 public:
     virtual void Tick(float DeltaTime) override;
 
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     USceneComponent* SceneRoot;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     UStaticMeshComponent* MeshComponent;
 
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UDecalComponent> SelectionDecalComponent;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<URTSProductionQueueComponent> ProductionQueueComponent;
+
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<URTSHealthComponent> HealthComponent;
 
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<URTSCombatEffectsComponent> CombatEffectsComponent;
+
+
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     URTSBuildingData* BuildingData;
+
 
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     FRTSGridCoord GridOriginCoord;
 
+
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     int32 GridWidth = 1;
+
 
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     int32 GridHeight = 1;
 
+
     UPROPERTY(ReplicatedUsing = OnRep_BuildingSetup, BlueprintReadOnly, Category = "RTS Building")
     float CachedCellSize = 100.0f;
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void InitializeBuilding(
@@ -80,8 +100,10 @@ public:
         ARTSGridManager* InGridManager
     );
 
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void FitMeshToGridFootprint(float CellSize);
+
 
  
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
@@ -91,64 +113,88 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building")
     TObjectPtr<ARTSGridManager> OwningGridManager = nullptr;
 
+
     
     UFUNCTION(BlueprintCallable, Category = "RTS Building")
     void SetOwningGridManager(ARTSGridManager* InGridManager);
 
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Grid")
     void RegisterToGrid();
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Grid")
     void UnregisterFromGrid();
 
 
+
     UPROPERTY(ReplicatedUsing = OnRep_BuildingState, BlueprintReadOnly, Category = "RTS Building|Construction")
     ERTSBuildingState BuildingState = ERTSBuildingState::Completed;
+
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Building|Construction")
     float BuildTime = 0.0f;
 
+
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Building|Construction")
     float BuildStartServerTime = 0.0f;
+
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Construction")
     float CurrentBuildTime = 0.0f;
 
+
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Construction")
     bool bIsCompleted = true;
+
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Building|Preview")
     bool bIsPreviewBuilding = false;
 
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
     void BeginConstruction(float InBuildTime);
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
     void CompleteConstruction();
 
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
     void CancelConstruction(bool bRefundResources);
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Construction")
     float GetBuildProgress01() const;
 
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
     bool QueueUnitProduction(URTSUnitData* UnitData);
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
     void SetProductionRallyPoint(const FVector& WorldLocation);
 
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
+    void SetProductionRallyPointTarget(const FVector& WorldLocation, ARTSResourceNode* ResourceTarget);
+
+
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Production")
     void ClearProductionRallyPoint();
+
 
     UFUNCTION(BlueprintCallable, Category = "RTS Building|Command")
     virtual void StopAllCommands();
 
+
     UFUNCTION(BlueprintNativeEvent, Category = "RTS Building|Construction")
     void OnConstructionCompleted();
 
+
     UFUNCTION()
     void OnRep_BuildingSetup();
+
 
     UFUNCTION()
     void OnRep_BuildingState();
@@ -163,6 +209,7 @@ protected:
     void RegisterToLocalGridIfNeeded();
     void ApplyCompletedGridEffectsIfNeeded();
     void RemoveCompletedGridEffectsIfNeeded();
+    void UpdateSelectionDecal();
     FRTSGridCoord GetFootprintCenterCoord() const;
     ARTSGridManager* ResolveGridManager();
     float GetSyncedServerTimeSeconds() const;
@@ -173,17 +220,22 @@ public:
     UPROPERTY(ReplicatedUsing = OnRep_TeamInfo, BlueprintReadOnly, Category = "RTS Team")
     int32 TeamNumber = -1;
 
+
     UPROPERTY(ReplicatedUsing = OnRep_TeamInfo, BlueprintReadOnly, Category = "RTS Team")
     FLinearColor TeamColor = FLinearColor::White;
+
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
     bool bApplyTeamColorToMaterials = true;
 
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
     FName TeamColorMaterialParameterName = TEXT("TeamColor");
 
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Team|Visual")
     FName TeamNumberMaterialParameterName = TEXT("TeamNumber");
+
 
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Team")
     TObjectPtr<ARTSPlayerState> OwningPlayerState;
@@ -191,12 +243,25 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "RTS Selection")
     bool bIsSelected = false;
 
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Selection")
+    TObjectPtr<UMaterialInterface> SelectionDecalMaterial = nullptr;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Selection")
+    FVector SelectionDecalSize = FVector::ZeroVector;
+
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS Selection")
+    float SelectionDecalZOffset = 8.0f;
+
     UFUNCTION()
     void OnRep_TeamInfo();
 
     void ApplyTeamVisual();
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 
     UFUNCTION()
     void SetTeamInfo(int32 NewTeamNumber, const FLinearColor& NewTeamColor);
