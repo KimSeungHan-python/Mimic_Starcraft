@@ -49,6 +49,25 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTS Supply")
 	int32 MaxSupplyCap = 200;
 
+	/// <summary>
+	/// Lobby Select한건데 위에 변수들은 없애도되는건가? 아니면 따로 있어야하는걸까?
+	/// </summary>
+	UPROPERTY(ReplicatedUsing = OnRep_LobbySelection, BlueprintReadOnly, Category = "RTS Lobby")
+	ERTSRace LobbySelectedRace = ERTSRace::Terran;
+
+	UPROPERTY(ReplicatedUsing = OnRep_LobbySelection, BlueprintReadOnly, Category = "RTS Lobby")
+	FLinearColor LobbySelectedColor = FLinearColor::Blue;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTS Lobby")
+	bool bIsRoomHost = false;
+
+	UFUNCTION()
+	void OnRep_LobbySelection();
+
+	void SetLobbySelection(ERTSRace InRace, const FLinearColor& InColor);
+
+	void SetRoomHost(bool bInIsHost);
+
 	UFUNCTION()
 	void OnRep_Resources();
 

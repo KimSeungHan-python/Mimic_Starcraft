@@ -22,11 +22,43 @@ void URTSLobbyWidget::RefreshActiveRoom()
     OnActiveRoomUpdated(ActiveRoom);
 }
 
-void URTSLobbyWidget::StartGame()
+bool URTSLobbyWidget::StartGame()
+{
+    if (!RTSGameInstance)
+    {
+        return false;
+    }
+
+    if (!RTSGameInstance->IsLocalPlayerRoomHost())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Only room host can start the game."));
+        return false;
+    }
+
+    RTSGameInstance->StartGameFromLobby();
+    return true;
+}
+
+bool URTSLobbyWidget::IsLocalPlayerRoomHost() const
+{
+    return RTSGameInstance
+        ? RTSGameInstance->IsLocalPlayerRoomHost()
+        : false;
+}
+
+void URTSLobbyWidget::SetSelectedRace(ERTSRace InRace)
 {
     if (RTSGameInstance)
     {
-        RTSGameInstance->StartGameFromLobby();
+        RTSGameInstance->SetSelectedRace(InRace);
+    }
+}
+
+void URTSLobbyWidget::SetSelectedPlayerColor(FLinearColor InColor)
+{
+    if (RTSGameInstance)
+    {
+        RTSGameInstance->SetSelectedPlayerColor(InColor);
     }
 }
 

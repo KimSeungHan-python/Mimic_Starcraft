@@ -53,4 +53,6 @@ private:
 	URTSRaceStartData* GetStartData(ERTSRace Race) const;
 
 	ERTSRace GetRaceForPlayer(APlayerController* NewPlayer) const;
+
+	FLinearColor GetColorForPlayer(APlayerController* NewPlayer, int32 TeamNumber) const;
 };

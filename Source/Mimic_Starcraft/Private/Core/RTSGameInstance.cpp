@@ -38,6 +38,8 @@ void URTSGameInstance::RefreshLocalRoomList()
 
 bool URTSGameInstance::HostLocalRoom(const FText& RoomName, const FText& HostName)
 {
+    bLocalPlayerIsRoomHost = true;
+
     const FText EffectiveRoomName = RoomName.IsEmpty()
         ? FText::FromString(TEXT("Local Room"))
         : RoomName;
@@ -61,6 +63,8 @@ bool URTSGameInstance::HostLocalRoom(const FText& RoomName, const FText& HostNam
 
 bool URTSGameInstance::JoinLocalRoom(FName RoomId)
 {
+    bLocalPlayerIsRoomHost = false;
+
     RefreshLocalRoomList();
 
     for (const FRTSRoomInfo& Room : CachedRooms)
@@ -74,6 +78,21 @@ bool URTSGameInstance::JoinLocalRoom(FName RoomId)
     }
 
     return false;
+}
+
+bool URTSGameInstance::IsLocalPlayerRoomHost() const
+{
+    return bLocalPlayerIsRoomHost;
+}
+
+void URTSGameInstance::SetSelectedRace(ERTSRace InRace)
+{
+    SelectedRace = InRace;
+}
+
+void URTSGameInstance::SetSelectedPlayerColor(FLinearColor InColor)
+{
+    SelectedPlayerColor = InColor;
 }
 
 void URTSGameInstance::OpenConfiguredLevel(FName MapName) const

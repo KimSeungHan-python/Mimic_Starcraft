@@ -37,6 +37,34 @@ void ARTSPlayerState::SetResources(int32 InMinerals, int32 InVespene)
 	OnRep_Resources();
 }
 
+void ARTSPlayerState::SetLobbySelection(ERTSRace InRace, const FLinearColor& InColor)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	LobbySelectedRace = InRace;
+	LobbySelectedColor = InColor;
+
+	OnRep_LobbySelection();
+}
+
+void ARTSPlayerState::SetRoomHost(bool bInIsHost)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	bIsRoomHost = bInIsHost;
+}
+
+void ARTSPlayerState::OnRep_LobbySelection()
+{
+	// 나중에 UI 갱신용 Delegate 넣어도 됨
+}
+
 void ARTSPlayerState::OnRep_Resources()
 {
 }
@@ -153,4 +181,7 @@ void ARTSPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(ARTSPlayerState, Vespene);
 	DOREPLIFETIME(ARTSPlayerState, SupplyUsed);
 	DOREPLIFETIME(ARTSPlayerState, SupplyCap);
+	DOREPLIFETIME(ARTSPlayerState, LobbySelectedRace);
+	DOREPLIFETIME(ARTSPlayerState, LobbySelectedColor);
+	DOREPLIFETIME(ARTSPlayerState, bIsRoomHost);
 }

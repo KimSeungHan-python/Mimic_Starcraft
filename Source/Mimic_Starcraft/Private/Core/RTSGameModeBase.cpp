@@ -16,6 +16,7 @@
 
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
+#include "Core/RTSGameInstance.h"
 
 ARTSGameModeBase::ARTSGameModeBase()
 {
@@ -151,11 +152,7 @@ void ARTSGameModeBase::InitializePlayerState(APlayerController* NewPlayer, ARTSS
 
 	// Player ID 에 맞게 색을 주는데 이거 후에 수정하면 될듯 UI에서 선택할 수 있게
 	const int32 TeamNumber = PS->GetPlayerId();
-
-	const FLinearColor TeamColor = TeamColors.IsValidIndex(TeamNumber)
-		? TeamColors[TeamNumber]
-		: FLinearColor::White;
-
+	const FLinearColor TeamColor = GetColorForPlayer(NewPlayer, TeamNumber);
 	const ERTSRace Race = GetRaceForPlayer(NewPlayer);
 
 	PS->SetTeamInfo(TeamNumber, TeamColor, Race, Camp->CampIndex);
@@ -449,9 +446,26 @@ void ARTSGameModeBase::ApplyRaceStartEffect(APlayerController* NewPlayer, ARTSSt
 
 ERTSRace ARTSGameModeBase::GetRaceForPlayer(APlayerController* NewPlayer) const
 {
-	// 임시 기본값.
-	// 나중에는 로비 선택값, GameInstance, URL Option, Session Setting 등에서 가져오면 됨.
-	return ERTSRace::Zerg;
+	const URTSGameInstance* GI = GetGameInstance<URTSGameInstance>();
+	if (GI)
+	{
+		return GI->SelectedRace;
+	}
+
+	return ERTSRace::Terran;
+}
+
+FLinearColor ARTSGameModeBase::GetColorForPlayer(APlayerController* NewPlayer, int32 TeamNumber) const
+{
+	const URTSGameInstance* GI = GetGameInstance<URTSGameInstance>();
+	if (GI)
+	{
+		return GI->SelectedPlayerColor;
+	}
+
+	return TeamColors.IsValidIndex(TeamNumber)
+		? TeamColors[TeamNumber]
+		: FLinearColor::White;
 }
 
 URTSRaceStartData* ARTSGameModeBase::GetStartData(ERTSRace Race) const

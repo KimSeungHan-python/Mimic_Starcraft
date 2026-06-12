@@ -26,7 +26,16 @@ public:
     void RefreshActiveRoom();
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
-    void StartGame();
+    bool StartGame();
+
+    UFUNCTION(BlueprintPure, Category = "RTS Lobby")
+    bool IsLocalPlayerRoomHost() const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void SetSelectedRace(ERTSRace InRace);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void SetSelectedPlayerColor(FLinearColor InColor);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     void ReturnToRoomBrowser();

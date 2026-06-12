@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "RTSPlayerState.h"
 #include "RTSGameInstance.generated.h"
 
 USTRUCT(BlueprintType)
@@ -29,6 +30,8 @@ struct MIMIC_STARCRAFT_API FRTSRoomInfo
 
     UPROPERTY(BlueprintReadOnly, Category = "RTS Room")
     bool bIsJoinable = true;
+
+
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRTSRoomListChanged);
@@ -63,6 +66,15 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "RTS Flow|Rooms")
     FRTSRoomListChanged OnRoomListChanged;
 
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Lobby")
+    bool bLocalPlayerIsRoomHost = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Lobby")
+    ERTSRace SelectedRace = ERTSRace::Terran;
+
+    UPROPERTY(BlueprintReadOnly, Category = "RTS Lobby")
+    FLinearColor SelectedPlayerColor = FLinearColor::Blue;
+
     UFUNCTION(BlueprintCallable, Category = "RTS Flow")
     void OpenMainMenu();
 
@@ -83,6 +95,15 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "RTS Flow|Rooms")
     bool JoinLocalRoom(FName RoomId);
+
+    UFUNCTION(BlueprintPure, Category = "RTS Lobby")
+    bool IsLocalPlayerRoomHost() const;
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void SetSelectedRace(ERTSRace InRace);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void SetSelectedPlayerColor(FLinearColor InColor);
 
 protected:
     void OpenConfiguredLevel(FName MapName) const;

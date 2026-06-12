@@ -4,6 +4,7 @@ void URTSLobbyBrowserWidget::NativeConstruct()
 {
     Super::NativeConstruct();
 
+    
     BindToGameInstance(GetGameInstance<URTSGameInstance>());
 }
 
