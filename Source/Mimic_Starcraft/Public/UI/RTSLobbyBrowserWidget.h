@@ -27,10 +27,19 @@ public:
     void RefreshRooms();
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void RequestRefreshRooms();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     bool HostRoom(const FText& RoomName, const FText& HostName);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    bool HostRoomOnMap(const FText& RoomName, const FText& HostName, FName MapName);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     bool JoinRoom(FName RoomId);
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void SetSelectedGameMapName(FName MapName);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     void OpenMainMenu();

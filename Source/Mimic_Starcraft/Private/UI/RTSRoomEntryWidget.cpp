@@ -6,23 +6,47 @@
 
 void URTSRoomEntryWidget::SetupRoomEntry(const FRTSRoomInfo& InRoomInfo, URTSLobbyBrowserWidget* InOwner)
 {
-    RoomInfo = InRoomInfo;
     OwnerLobbyWidget = InOwner;
+    UpdateRoomEntry(InRoomInfo);
+}
+
+void URTSRoomEntryWidget::UpdateRoomEntry(const FRTSRoomInfo& InRoomInfo)
+{
+    RoomInfo = InRoomInfo;
     OnRoomInfoUpdated(RoomInfo);
 }
 
 void URTSRoomEntryWidget::JoinThisRoom()
 {
+    TryJoinThisRoom();
+}
+
+bool URTSRoomEntryWidget::TryJoinThisRoom()
+{
     if (!CanJoinRoom())
     {
         ShowJoinFailWidget();
+        OnJoinFailed(RoomInfo);
+        return false;
     }
 
     if (OwnerLobbyWidget)
     {
-        OwnerLobbyWidget->JoinRoom(RoomInfo.RoomId);
+        const bool bJoinedRoom = OwnerLobbyWidget->JoinRoom(RoomInfo.RoomId);
+        if (bJoinedRoom)
+        {
+            OnJoinSucceeded(RoomInfo);
+            return true;
+        }
+
+        ShowJoinFailWidget();
+        OnJoinFailed(RoomInfo);
+        return false;
     }
 
+    ShowJoinFailWidget();
+    OnJoinFailed(RoomInfo);
+    return false;
 }
 
 bool URTSRoomEntryWidget::CanJoinRoom() const

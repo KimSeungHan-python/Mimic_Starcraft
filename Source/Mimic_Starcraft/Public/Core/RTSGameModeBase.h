@@ -11,6 +11,7 @@
 class ARTSStartCamp;
 class URTSRaceStartData;
 class ARTSPlayerController;
+struct FRTSLobbyPlayerInfo;
 
 UCLASS()
 class MIMIC_STARCRAFT_API ARTSGameModeBase : public AGameModeBase
@@ -55,4 +56,6 @@ private:
 	ERTSRace GetRaceForPlayer(APlayerController* NewPlayer) const;
 
 	FLinearColor GetColorForPlayer(APlayerController* NewPlayer, int32 TeamNumber) const;
+
+	bool GetLobbyPlayerInfoForPlayer(APlayerController* NewPlayer, FRTSLobbyPlayerInfo& OutPlayerInfo) const;
 };

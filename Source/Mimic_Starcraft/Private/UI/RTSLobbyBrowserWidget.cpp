@@ -55,10 +55,28 @@ void URTSLobbyBrowserWidget::RefreshRooms()
     OnRoomsUpdated(Rooms);
 }
 
+void URTSLobbyBrowserWidget::RequestRefreshRooms()
+{
+    if (RTSGameInstance)
+    {
+        RTSGameInstance->RefreshLocalRoomList();
+        return;
+    }
+
+    RefreshRooms();
+}
+
 bool URTSLobbyBrowserWidget::HostRoom(const FText& RoomName, const FText& HostName)
 {
     return RTSGameInstance
         ? RTSGameInstance->HostLocalRoom(RoomName, HostName)
+        : false;
+}
+
+bool URTSLobbyBrowserWidget::HostRoomOnMap(const FText& RoomName, const FText& HostName, FName MapName)
+{
+    return RTSGameInstance
+        ? RTSGameInstance->HostLocalRoomOnMap(RoomName, HostName, MapName)
         : false;
 }
 
@@ -67,6 +85,14 @@ bool URTSLobbyBrowserWidget::JoinRoom(FName RoomId)
     return RTSGameInstance
         ? RTSGameInstance->JoinLocalRoom(RoomId)
         : false;
+}
+
+void URTSLobbyBrowserWidget::SetSelectedGameMapName(FName MapName)
+{
+    if (RTSGameInstance)
+    {
+        RTSGameInstance->SetSelectedGameMapName(MapName);
+    }
 }
 
 void URTSLobbyBrowserWidget::OpenMainMenu()

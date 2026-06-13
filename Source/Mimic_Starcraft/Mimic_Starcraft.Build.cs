@@ -16,7 +16,11 @@ public class Mimic_Starcraft : ModuleRules
 			"InputCore",
 			"NavigationSystem",
 			"UMG",
-			"EnhancedInput"
+			"EnhancedInput",
+			"OnlineSubsystem",
+			"OnlineSubsystemUtils"
 		});
+
+		DynamicallyLoadedModuleNames.Add("OnlineSubsystemNull");
 	}
 }

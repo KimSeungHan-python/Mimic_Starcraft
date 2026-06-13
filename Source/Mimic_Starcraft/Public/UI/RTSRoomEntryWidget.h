@@ -28,9 +28,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     void SetupRoomEntry(const FRTSRoomInfo& InRoomInfo, URTSLobbyBrowserWidget* InOwner);
 
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    void UpdateRoomEntry(const FRTSRoomInfo& InRoomInfo);
 
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     void JoinThisRoom();
+
+    UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
+    bool TryJoinThisRoom();
  
     UFUNCTION(BlueprintCallable, Category = "RTS Lobby")
     bool CanJoinRoom() const;
@@ -40,4 +45,10 @@ public:
 
     UFUNCTION(BlueprintImplementableEvent, Category = "RTS Lobby")
     void OnRoomInfoUpdated(const FRTSRoomInfo& InRoomInfo);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "RTS Lobby")
+    void OnJoinSucceeded(const FRTSRoomInfo& InRoomInfo);
+
+    UFUNCTION(BlueprintImplementableEvent, Category = "RTS Lobby")
+    void OnJoinFailed(const FRTSRoomInfo& InRoomInfo);
 };
