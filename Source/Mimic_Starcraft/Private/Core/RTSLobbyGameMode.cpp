@@ -144,6 +144,37 @@ bool ARTSLobbyGameMode::SetLobbyPlayerTeam(
     return true;
 }
 
+bool ARTSLobbyGameMode::SetLobbyPlayerName(
+    ARTSLobbyPlayerController* RequestingPlayer,
+    FName TargetPlayerId,
+    const FText& PlayerName
+)
+{
+    if (!RequestingPlayer)
+    {
+        return false;
+    }
+
+    FRTSRoomInfo RoomInfo = GetMutableRoom();
+    if (!CanEditPlayer(RoomInfo, RequestingPlayer->LobbyPlayerId, TargetPlayerId))
+    {
+        return false;
+    }
+
+    const int32 PlayerIndex = FindPlayerIndex(RoomInfo, TargetPlayerId);
+    if (PlayerIndex == INDEX_NONE)
+    {
+        return false;
+    }
+
+    RoomInfo.Players[PlayerIndex].PlayerName = PlayerName.IsEmpty()
+        ? FText::FromString(TEXT("Player"))
+        : PlayerName;
+    NormalizeRoom(RoomInfo);
+    PublishRoom(RoomInfo);
+    return true;
+}
+
 bool ARTSLobbyGameMode::SetLobbyPlayerRace(
     ARTSLobbyPlayerController* RequestingPlayer,
     FName TargetPlayerId,
@@ -291,6 +322,11 @@ void ARTSLobbyGameMode::PublishRoom(const FRTSRoomInfo& InRoomInfo)
     if (ARTSLobbyGameState* LobbyGameState = GetLobbyGameState())
     {
         LobbyGameState->SetActiveRoom(InRoomInfo);
+    }
+
+    if (URTSGameInstance* RTSGameInstance = GetGameInstance<URTSGameInstance>())
+    {
+        RTSGameInstance->UpdateAdvertisedRoomSession(InRoomInfo);
     }
 }
 

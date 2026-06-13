@@ -104,6 +104,16 @@ void ARTSLobbyPlayerController::ServerSetLobbyPlayerTeam_Implementation(FName Ta
     }
 }
 
+void ARTSLobbyPlayerController::ServerSetLobbyPlayerName_Implementation(FName TargetPlayerId, const FText& PlayerName)
+{
+    if (ARTSLobbyGameMode* LobbyGameMode = GetWorld()
+        ? GetWorld()->GetAuthGameMode<ARTSLobbyGameMode>()
+        : nullptr)
+    {
+        LobbyGameMode->SetLobbyPlayerName(this, TargetPlayerId, PlayerName);
+    }
+}
+
 void ARTSLobbyPlayerController::ServerSetLobbyPlayerRace_Implementation(FName TargetPlayerId, ERTSRace Race)
 {
     if (ARTSLobbyGameMode* LobbyGameMode = GetWorld()

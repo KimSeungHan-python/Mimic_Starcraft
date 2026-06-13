@@ -17,6 +17,8 @@ namespace RTSLobbySession
     static const FName RoomNameKey(TEXT("RTS_ROOM_NAME"));
     static const FName HostNameKey(TEXT("RTS_HOST_NAME"));
     static const FName MapNameKey(TEXT("RTS_MAP_NAME"));
+    static const FName CurrentPlayersKey(TEXT("RTS_CURRENT_PLAYERS"));
+    static const FName MaxPlayersKey(TEXT("RTS_MAX_PLAYERS"));
 }
 
 URTSGameInstance::URTSGameInstance()
@@ -335,6 +337,12 @@ void URTSGameInstance::SetLocalLobbyPlayerName(const FText& InPlayerName)
         ? MakeDefaultPlayerName()
         : InPlayerName;
 
+    if (ARTSLobbyPlayerController* LobbyPlayerController = GetLobbyPlayerController())
+    {
+        LobbyPlayerController->ServerSetLobbyPlayerName(GetOrCreateLocalLobbyPlayerId(), LocalLobbyPlayerName);
+        return;
+    }
+
     const int32 LocalPlayerIndex = FindLocalLobbyPlayerIndex();
     if (LocalPlayerIndex == INDEX_NONE)
     {
@@ -607,6 +615,30 @@ void URTSGameInstance::ApplyNetworkRoomState(const FRTSRoomInfo& InRoomInfo)
     OnActiveRoomChanged.Broadcast(ActiveRoom);
 }
 
+void URTSGameInstance::UpdateAdvertisedRoomSession(const FRTSRoomInfo& InRoomInfo)
+{
+    IOnlineSessionPtr SessionInterface = GetOnlineSessionInterface();
+    if (!SessionInterface)
+    {
+        return;
+    }
+
+    FNamedOnlineSession* NamedSession = SessionInterface->GetNamedSession(RTSLobbySession::SessionName);
+    if (!NamedSession)
+    {
+        return;
+    }
+
+    FOnlineSessionSettings SessionSettings = NamedSession->SessionSettings;
+    SessionSettings.Set(RTSLobbySession::RoomNameKey, InRoomInfo.RoomName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::HostNameKey, InRoomInfo.HostName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::MapNameKey, InRoomInfo.MapName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::CurrentPlayersKey, InRoomInfo.CurrentPlayers, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::MaxPlayersKey, InRoomInfo.MaxPlayers, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+
+    SessionInterface->UpdateSession(RTSLobbySession::SessionName, SessionSettings, true);
+}
+
 void URTSGameInstance::ShowFlowWidgetForCurrentMap()
 {
     ShowFlowWidgetForCurrentMap(GetWorld());
@@ -801,6 +833,8 @@ bool URTSGameInstance::CreateOnlineRoomSession()
     SessionSettings.Set(RTSLobbySession::RoomNameKey, ActiveRoom.RoomName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
     SessionSettings.Set(RTSLobbySession::HostNameKey, ActiveRoom.HostName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
     SessionSettings.Set(RTSLobbySession::MapNameKey, ActiveRoom.MapName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::CurrentPlayersKey, ActiveRoom.CurrentPlayers, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+    SessionSettings.Set(RTSLobbySession::MaxPlayersKey, ActiveRoom.MaxPlayers, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
 
     if (CreateSessionCompleteDelegateHandle.IsValid())
     {
@@ -873,11 +907,15 @@ FRTSRoomInfo URTSGameInstance::MakeRoomInfoFromSessionResult(
     FString RoomNameString;
     FString HostNameString;
     FString MapNameString;
+    int32 AdvertisedCurrentPlayers = INDEX_NONE;
+    int32 AdvertisedMaxPlayers = INDEX_NONE;
 
     SearchResult.Session.SessionSettings.Get(RTSLobbySession::RoomIdKey, RoomIdString);
     SearchResult.Session.SessionSettings.Get(RTSLobbySession::RoomNameKey, RoomNameString);
     SearchResult.Session.SessionSettings.Get(RTSLobbySession::HostNameKey, HostNameString);
     SearchResult.Session.SessionSettings.Get(RTSLobbySession::MapNameKey, MapNameString);
+    SearchResult.Session.SessionSettings.Get(RTSLobbySession::CurrentPlayersKey, AdvertisedCurrentPlayers);
+    SearchResult.Session.SessionSettings.Get(RTSLobbySession::MaxPlayersKey, AdvertisedMaxPlayers);
 
     if (RoomIdString.IsEmpty())
     {
@@ -894,13 +932,18 @@ FRTSRoomInfo URTSGameInstance::MakeRoomInfoFromSessionResult(
     RoomInfo.MapName = MapNameString.IsEmpty()
         ? GameMapName
         : FName(*MapNameString);
-    RoomInfo.MaxPlayers = FMath::Max(1, SearchResult.Session.SessionSettings.NumPublicConnections);
-    RoomInfo.CurrentPlayers = FMath::Clamp(
-        RoomInfo.MaxPlayers - SearchResult.Session.NumOpenPublicConnections,
-        0,
-        RoomInfo.MaxPlayers
-    );
-    RoomInfo.bIsJoinable = SearchResult.Session.NumOpenPublicConnections > 0;
+    RoomInfo.MaxPlayers = AdvertisedMaxPlayers > 0
+        ? AdvertisedMaxPlayers
+        : FMath::Max(1, SearchResult.Session.SessionSettings.NumPublicConnections);
+    RoomInfo.CurrentPlayers = AdvertisedCurrentPlayers >= 0
+        ? FMath::Clamp(AdvertisedCurrentPlayers, 0, RoomInfo.MaxPlayers)
+        : FMath::Clamp(
+            RoomInfo.MaxPlayers - SearchResult.Session.NumOpenPublicConnections,
+            0,
+            RoomInfo.MaxPlayers
+        );
+    RoomInfo.bIsJoinable = RoomInfo.CurrentPlayers < RoomInfo.MaxPlayers
+        && SearchResult.Session.NumOpenPublicConnections > 0;
 
     return RoomInfo;
 }

@@ -26,6 +26,9 @@ public:
     void ServerSetLobbyPlayerTeam(FName TargetPlayerId, int32 TeamNumber);
 
     UFUNCTION(Server, Reliable)
+    void ServerSetLobbyPlayerName(FName TargetPlayerId, const FText& PlayerName);
+
+    UFUNCTION(Server, Reliable)
     void ServerSetLobbyPlayerRace(FName TargetPlayerId, ERTSRace Race);
 
     UFUNCTION(Server, Reliable)

@@ -30,6 +30,7 @@ public:
     );
 
     bool SetLobbyPlayerTeam(ARTSLobbyPlayerController* RequestingPlayer, FName TargetPlayerId, int32 TeamNumber);
+    bool SetLobbyPlayerName(ARTSLobbyPlayerController* RequestingPlayer, FName TargetPlayerId, const FText& PlayerName);
     bool SetLobbyPlayerRace(ARTSLobbyPlayerController* RequestingPlayer, FName TargetPlayerId, ERTSRace Race);
     bool SetLobbyPlayerColor(ARTSLobbyPlayerController* RequestingPlayer, FName TargetPlayerId, const FLinearColor& PlayerColor);
     bool StartLobbyGame(ARTSLobbyPlayerController* RequestingPlayer);

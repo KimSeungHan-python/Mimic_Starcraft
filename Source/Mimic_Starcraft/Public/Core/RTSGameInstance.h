@@ -243,6 +243,7 @@ public:
     void ShowFlowWidgetForCurrentMap();
 
     void ApplyNetworkRoomState(const FRTSRoomInfo& InRoomInfo);
+    void UpdateAdvertisedRoomSession(const FRTSRoomInfo& InRoomInfo);
 
 protected:
     void OpenConfiguredLevel(FName MapName) const;
